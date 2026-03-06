@@ -60,8 +60,6 @@ flowchart TD
 
 ### ⚙️ Logical Data Flow (Mermaid)
 ```mermaid
-### ⚙️ Logical Data Flow (Mermaid)
-```mermaid
 sequenceDiagram
     participant Attacker
     participant GCE as GCP Compute Engine
