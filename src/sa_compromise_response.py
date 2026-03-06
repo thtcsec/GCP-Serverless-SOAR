@@ -121,28 +121,41 @@ def disable_sa_keys(sa_email):
         logger.error(f"Error disabling SA keys: {str(e)}")
 
 def remove_critical_roles(sa_email):
-    """Remove service account from critical IAM roles"""
+    """Remove service account from critical IAM roles at the project level"""
     try:
         critical_roles = [
             'roles/editor', 'roles/owner', 'roles/admin',
             'roles/storage.admin', 'roles/compute.admin'
         ]
         
-        sa_resource = f"projects/{PROJECT_ID}/serviceAccounts/{sa_email}"
+        # Initialize Resource Manager Client for Project IAM bindings
+        from google.cloud import resourcemanager_v3
+        rm_client = resourcemanager_v3.ProjectsClient()
+        project_name = f"projects/{PROJECT_ID}"
         
-        for role in critical_roles:
-            try:
-                iam_client.remove_iam_policy_binding(
-                    resource=f"projects/{PROJECT_ID}",
-                    body={
-                        'role': role,
-                        'member': f"serviceAccount:{sa_email}"
-                    }
-                )
-                logger.info(f"Removed {role} from {sa_email}")
-            except Exception:
-                # Role might not be assigned
-                pass
+        # Get current project IAM policy
+        policy = rm_client.get_iam_policy(request={"resource": project_name})
+        
+        member_to_remove = f"serviceAccount:{sa_email}"
+        policy_changed = False
+        
+        # Filter out the compromised SA from critical roles
+        for binding in policy.bindings:
+            if binding.role in critical_roles:
+                if member_to_remove in binding.members:
+                    binding.members.remove(member_to_remove)
+                    logger.info(f"Preparing to remove {binding.role} from {sa_email}")
+                    policy_changed = True
+                    
+        # Apply the updated policy back to the project if changes were made
+        if policy_changed:
+            rm_client.set_iam_policy(request={
+                "resource": project_name,
+                "policy": policy
+            })
+            logger.info(f"Project IAM policy updated: critical roles removed for {sa_email}")
+        else:
+            logger.info(f"No critical project-level roles found for {sa_email}")
                 
     except Exception as e:
         logger.error(f"Error removing critical roles: {str(e)}")

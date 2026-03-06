@@ -242,35 +242,34 @@ def execute_exfiltration_response(bucket_name, principal_email, caller_ip, analy
         logger.error(f"Error executing exfiltration response: {str(e)}")
 
 def block_user_bucket_access(bucket_name, principal_email):
-    """Block user access to the compromised bucket"""
+    """Block user access to the compromised bucket by explicitly removing them from all bindings"""
     try:
         bucket = storage_client.bucket(bucket_name)
         
         # Get current IAM policy
         policy = bucket.get_iam_policy()
         
-        # Add deny entry for the user
-        deny_binding = {
-            'role': 'roles/storage.objectViewer',
-            'members': [f'user:{principal_email}'],
-            'condition': {
-                'title': 'Block Exfiltration User',
-                'description': f'Block access for user {principal_email} due to exfiltration detection',
-                'expression': f'resource.name.startsWith("projects/_/buckets/{bucket_name}")'
-            }
-        }
+        member_id = f'user:{principal_email}'
+        if '.gserviceaccount.com' in principal_email:
+            member_id = f'serviceAccount:{principal_email}'
+            
+        policy_changed = False
         
-        # Remove any existing allow policies for this user
-        policy.bindings = [
-            binding for binding in policy.bindings 
-            if f'user:{principal_email}' not in binding.get('members', [])
-        ]
-        
-        # Add deny binding
-        policy.bindings.append(deny_binding)
-        
-        bucket.set_iam_policy(policy)
-        logger.info(f"Blocked user {principal_email} access to bucket {bucket_name}")
+        # Cleanly remove the user from ALL existing bucket-level bindings
+        for binding in policy.bindings:
+            if member_id in binding.get('members', []):
+                binding['members'].remove(member_id)
+                policy_changed = True
+                
+        if policy_changed:
+            bucket.set_iam_policy(policy)
+            logger.info(f"Removed user {principal_email} from all bucket IAM bindings on {bucket_name}")
+        else:
+            logger.warning(f"User {principal_email} had no direct bucket IAM bindings to remove. Assumed inherited from Project level.")
+            
+        # NOTE: If the user inherits 'roles/storage.objectViewer' from the Project level, 
+        # this bucket-level removal will NOT stop them! 
+        # True SOAR would revoke their Project-level roles directly or use IAM Deny Policies (v2).
         
     except Exception as e:
         logger.error(f"Error blocking user access: {str(e)}")
