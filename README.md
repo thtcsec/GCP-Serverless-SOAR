@@ -1,47 +1,15 @@
-# GCP Serverless Security Orchestration, Automation, and Response (SOAR)
+# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
 
-This project demonstrates a fully automated Serverless Incident Response architecture on Google Cloud Platform (GCP). It detects malicious activity using **Security Command Center (SCC)** and automatically isolates the compromised Compute Engine VM while preserving its state for forensic investigation.
+![GCP](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) 
+![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Serverless](https://img.shields.io/badge/serverless-%23FD5750.svg?style=for-the-badge&logo=serverless&logoColor=white)
+
+This project demonstrates a fully automated, enterprise-grade Serverless Incident Response architecture on Google Cloud Platform (GCP). It detects malicious activity using **Security Command Center (SCC)** and automatically isolates compromised resources while preserving state for forensic investigation.
 
 ## 🏛️ Architecture
 
-```mermaid
-graph TD
-  A[Attacker] -->|Compromises| B(GCE Target VM)
-  A -->|Data Exfiltration| C[Cloud Storage]
-  A -->|SA Compromise| D[Service Account]
-  
-  B -->|C&C / Crypto Mining| E{Security Command Center}
-  C -->|Unusual Access| F{Cloud Audit Logs}
-  D -->|Suspicious Activity| F
-  
-  E -->|High Severity Finding| G[Pub/Sub Topic]
-  F -->|IAM/Storage Events| G
-  
-  G -->|Triggers Subscription| H((Cloud Function - GCE Response))
-  G -->|Triggers Subscription| I((Cloud Function - Storage Response))
-  G -->|Triggers Subscription| J((Cloud Function - SA Response))
-  
-  H -->|1. Change Network Tag| B
-  H -->|2. Detach Service Account| B
-  H -->|3. Block SSH Keys| B
-  H -->|4. Take Snapshot| K[(Disk Snapshot)]
-  H -->|5. Stop VM| B
-  
-  I -->|1. Block IAM Access| C
-  I -->|2. Enable Versioning| C
-  I -->|3. Set Retention| C
-  I -->|4. Forensic Data| L[(Bucket Metadata)]
-  
-  J -->|1. Disable Keys| D
-  J -->|2. Remove Roles| D
-  J -->|3. Audit Logs| M[IAM Audit]
-  J -->|4. Send Alert| N[Pub/Sub Alert]
-  
-  H -->|6. Send Alert| N
-  I -->|5. Send Alert| N
-  
-  N -->|Security Team| O[Security Admin]
-```
+![Architecture Diagram](./images/gcp_soar.png)
 
 The workflow involves:
 1. **Detection:** GCP Security Command Center detects anomalous behavior (e.g., Cryptocurrency mining).
