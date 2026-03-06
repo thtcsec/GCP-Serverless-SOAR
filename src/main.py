@@ -43,8 +43,9 @@ def process_finding(finding):
     severity = finding.get('severity', '')
     category = finding.get('category', '')
     resource_name = finding.get('resourceName', '') # Format: //compute.googleapis.com/projects/.../instances/instance-id
+    finding_id = finding.get('name', 'unknown-finding-id').split('/')[-1]
     
-    logger.info(f"Processing SCC Finding - Category: {category}, Severity: {severity}, Resource: {resource_name}")
+    logger.info(f"Processing SCC Finding - ID: {finding_id}, Category: {category}, Severity: {severity}, Resource: {resource_name}")
 
     if severity not in ['HIGH', 'CRITICAL']:
         logger.info(f"Ignoring finding with severity {severity}. Only HIGH or CRITICAL are processed.")
@@ -71,27 +72,28 @@ def process_finding(finding):
         return
 
     logger.info(f"Executing SOAR playbook on instance {instance_name} in {zone}", extra={
-        "json_fields": {"action": "SOAR_TRIGGER", "instance": instance_name, "zone": zone, "threat": category}
+        "json_fields": {"action": "SOAR_TRIGGER", "instance": instance_name, "zone": zone, "threat": category, "finding_id": finding_id}
     })
 
     try:
         isolate_instance(project_id, zone, instance_name)
         detach_service_account(project_id, zone, instance_name)
+        block_project_ssh_keys(project_id, zone, instance_name)
         take_snapshot(project_id, zone, instance_name, category)
         stop_instance(project_id, zone, instance_name)
         
         logger.info(f"SOAR Playbook completed successfully for {instance_name}", extra={
-            "json_fields": {"action": "SOAR_COMPLETE", "instance": instance_name, "status": "success"}
+            "json_fields": {"action": "SOAR_COMPLETE", "instance": instance_name, "status": "success", "finding_id": finding_id}
         })
         
-        send_slack_alert(project_id, zone, instance_name, category, severity)
+        send_slack_alert(project_id, zone, instance_name, category, severity, finding_id)
         
     except Exception as e:
         logger.error(f"Failed to execute SOAR playbook: {str(e)}", extra={
-            "json_fields": {"action": "SOAR_ERROR", "error": str(e)}
+            "json_fields": {"action": "SOAR_ERROR", "error": str(e), "finding_id": finding_id}
         })
 
-def send_slack_alert(project_id, zone, instance_name, category, severity):
+def send_slack_alert(project_id, zone, instance_name, category, severity, finding_id):
     if not SLACK_WEBHOOK_URL:
         logger.warning("SLACK_WEBHOOK_URL not configured. Skipping Slack alert.")
         return
@@ -113,8 +115,8 @@ def send_slack_alert(project_id, zone, instance_name, category, severity):
                     {"type": "mrkdwn", "text": f"*Zone:*\n{zone}"},
                     {"type": "mrkdwn", "text": f"*Instance:*\n`{instance_name}`"},
                     {"type": "mrkdwn", "text": f"*Threat Category:*\n{category}"},
-                    {"type": "mrkdwn", "text": f"*Severity:*\n{severity}"},
-                    {"type": "mrkdwn", "text": f"*SOAR Status:*\n✅ Isolated, SA Detached, Snapshotted, Stopped."}
+                    {"type": "mrkdwn", "text": f"*SCC Finding ID:*\n`{finding_id}`"},
+                    {"type": "mrkdwn", "text": f"*SOAR Status:*\n✅ Isolated, SA Detached, Project SSH Blocked, Snapshotted, Stopped."}
                 ]
             }
         ]
@@ -159,6 +161,37 @@ def detach_service_account(project_id, zone, instance_name):
             scopes=[]
         )
     )
+    operation.result()
+
+def block_project_ssh_keys(project_id, zone, instance_name):
+    logger.info(f"Blocking project-wide SSH keys for {instance_name} to prevent backdoor access")
+    
+    # Needs to get the instance fingerprint first to update metadata
+    instance = compute_client.get(project=project_id, zone=zone, instance=instance_name)
+    metadata = instance.metadata
+    
+    # Find existing items and update or append
+    items = metadata.items if metadata.items else []
+    
+    key_exists = False
+    for item in items:
+        if item.key == 'block-project-ssh-keys':
+            item.value = 'TRUE'
+            key_exists = True
+            break
+            
+    if not key_exists:
+        items.append(compute_v1.Items(key='block-project-ssh-keys', value='TRUE'))
+        
+    metadata.items = items
+    
+    operation = compute_client.set_metadata(
+        project=project_id,
+        zone=zone,
+        instance=instance_name,
+        metadata_resource=metadata
+    )
+    # Don't strictly need to wait but recommended for security configs
     operation.result()
 
 

@@ -13,17 +13,19 @@ graph TD
   
   E -->|1. Change Network Tag| B
   E -->|2. Detach Service Account| B
-  E -->|3. Take Disk Snapshot| F[(Compute Disk Snapshot)]
-  E -->|4. Stop VM| B
+  E -->|3. Block Project SSH Keys| B
+  E -->|4. Take Disk Snapshot| F[(Compute Disk Snapshot)]
+  E -->|5. Stop VM| B
 ```
 
 The workflow involves:
 1. **Detection:** GCP Security Command Center detects anomalous behavior (e.g., Cryptocurrency mining).
 2. **Event Routing:** SCC pushes the finding event to a Pub/Sub topic.
 3. **Automation Logic:** A Python Cloud Function is triggered by the Pub/Sub message.
-4. **Resolution (Response):** 
+4. **Resolution (Response Playbook):** 
    - **Isolate:** Replaces the VM's network tags with an `isolated-vm` tag. A pre-configured VPC Firewall rule explicitly denies all ingress and egress to this tag.
-   - **Revoke:** Detaches the IAM Service Account from the VM.
+   - **Revoke Service Account:** Detaches the IAM Service Account from the VM.
+   - **Block SSH:** Sets the instance metadata `block-project-ssh-keys=TRUE` to prevent adversaries from persisting via GCP-wide SSH keys.
    - **Preserve:** Takes a Snapshot of the VM's primary disk with forensic metadata tags attached.
    - **Stop:** Stops the VM to halt local execution.
 
