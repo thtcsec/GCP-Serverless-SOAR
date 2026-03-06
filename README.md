@@ -9,7 +9,48 @@ This project demonstrates a fully automated, enterprise-grade Serverless Inciden
 
 ## 🏛️ Architecture
 
-![Architecture Diagram](./images/gcp_soar.png)
+### 🖼️ High-Level Architecture
+![Architecture Diagram](images/gcp_soar.png)
+
+### ⚙️ Logical Data Flow (Mermaid)
+```mermaid
+graph TD
+  A[Attacker] -->|Compromises| B(GCE Target VM)
+  A -->|Data Exfiltration| C[Cloud Storage]
+  A -->|SA Compromise| D[Service Account]
+  
+  B -->|C&C / Crypto Mining| E{Security Command Center}
+  C -->|Unusual Access| F{Cloud Audit Logs}
+  D -->|Suspicious Activity| F
+  
+  E -->|High Severity Finding| G[Pub/Sub Topic]
+  F -->|IAM/Storage Events| G
+  
+  G -->|Triggers Subscription| H((Cloud Function - GCE Response))
+  G -->|Triggers Subscription| I((Cloud Function - Storage Response))
+  G -->|Triggers Subscription| J((Cloud Function - SA Response))
+  
+  H -->|1. Change Network Tag| B
+  H -->|2. Detach Service Account| B
+  H -->|3. Block SSH Keys| B
+  H -->|4. Take Snapshot| K[(Disk Snapshot)]
+  H -->|5. Stop VM| B
+  
+  I -->|1. Block IAM Access| C
+  I -->|2. Enable Versioning| C
+  I -->|3. Set Retention| C
+  I -->|4. Forensic Data| L[(Bucket Metadata)]
+  
+  J -->|1. Disable Keys| D
+  J -->|2. Remove Roles| D
+  J -->|3. Audit Logs| M[IAM Audit]
+  J -->|4. Send Alert| N[Pub/Sub Alert]
+  
+  H -->|6. Send Alert| N
+  I -->|5. Send Alert| N
+  
+  N -->|Security Team| O[Security Admin]
+```
 
 The workflow involves:
 1. **Detection:** GCP Security Command Center detects anomalous behavior (e.g., Cryptocurrency mining).
