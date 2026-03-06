@@ -11,3 +11,7 @@ opentelemetry-api==1.30.0
 opentelemetry-sdk==1.30.0
 opentelemetry-exporter-gcp-trace==1.9.0
 functions-framework==3.4.0
+pydantic==2.5.3
+
+# Dev & Testing Dependencies
+pytest==8.0.0
