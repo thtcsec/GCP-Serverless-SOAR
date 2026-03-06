@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -37,12 +37,11 @@ class FindingCategory(str, Enum):
 
 class SCCResource(BaseModel):
     """Resource attached to an SCC finding."""
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str = ""
     project_display_name: str = Field("", alias="projectDisplayName")
     type: str = ""
-
-    class Config:
-        populate_by_name = True
 
 
 class SCCFinding(BaseModel):
@@ -57,8 +56,7 @@ class SCCFinding(BaseModel):
     source_properties: Dict[str, Any] = Field(default_factory=dict, alias="sourceProperties")
     resource: SCCResource = Field(default_factory=SCCResource)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def is_compute_resource(self) -> bool:
@@ -74,10 +72,9 @@ class SCCFinding(BaseModel):
 # ---------------------------------------------------------------------------
 
 class AuthenticationInfo(BaseModel):
-    principal_email: str = Field("", alias="principalEmail")
+    model_config = ConfigDict(populate_by_name=True)
 
-    class Config:
-        populate_by_name = True
+    principal_email: str = Field("", alias="principalEmail")
 
 
 class AuditLogPayload(BaseModel):
@@ -91,8 +88,7 @@ class AuditLogPayload(BaseModel):
     status: Dict[str, Any] = Field(default_factory=dict)
     request: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class IAMAuditEvent(BaseModel):
@@ -101,8 +97,7 @@ class IAMAuditEvent(BaseModel):
     timestamp: Optional[str] = None
     resource: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     RISKY_METHODS: List[str] = [
         "CreateServiceAccountKey",
@@ -122,8 +117,7 @@ class StorageAuditEvent(BaseModel):
     proto_payload: AuditLogPayload = Field(..., alias="protoPayload")
     timestamp: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     READ_METHODS: List[str] = [
         "storage.objects.get",
@@ -146,5 +140,4 @@ class PubSubMessage(BaseModel):
     message_id: str = Field("", alias="messageId")
     publish_time: Optional[str] = Field(None, alias="publishTime")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

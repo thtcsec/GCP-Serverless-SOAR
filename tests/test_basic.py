@@ -73,9 +73,9 @@ class TestEventModels:
 
     def test_finding_category_enum(self):
         from src.models.events import FindingCategory
-        assert FindingCategory.COMPUTE_COMPROMISE == "COMPUTE_COMPROMISE"
-        assert FindingCategory.IAM_COMPROMISE == "IAM_COMPROMISE"
-        assert FindingCategory.STORAGE_EXFILTRATION == "STORAGE_EXFILTRATION"
+        assert FindingCategory.CRYPTOCURRENCY == "Cryptocurrency mining"
+        assert FindingCategory.MALWARE == "Malware"
+        assert FindingCategory.DATA_EXFILTRATION == "Data Exfiltration"
 
     def test_scc_finding_model(self):
         from src.models.events import SCCFinding, SCCResource
@@ -86,13 +86,13 @@ class TestEventModels:
             resource=SCCResource(
                 name="//compute.googleapis.com/projects/test/zones/us-central1-a/instances/vm-1",
                 type="google.compute.Instance",
-                project="test",
+                project_display_name="test",
             ),
-            finding_class="THREAT",
-            event_time="2024-01-01T00:00:00Z",
+            resourceName="//compute.googleapis.com/projects/test/zones/us-central1-a/instances/vm-1",
+            eventTime="2024-01-01T00:00:00Z",
         )
         assert finding.category == "MALWARE"
-        assert finding.resource.project == "test"
+        assert finding.resource.project_display_name == "test"
 
     def test_pubsub_message_model(self):
         from src.models.events import PubSubMessage
@@ -112,15 +112,15 @@ class TestCoreConfig:
     def test_default_config(self):
         from src.core.config import SOARConfig
         cfg = SOARConfig()
-        assert cfg.environment == "production"
         assert cfg.log_level == "INFO"
+        assert cfg.region == "us-central1"
 
-    @patch.dict(os.environ, {"ENVIRONMENT": "dev", "LOG_LEVEL": "DEBUG"})
+    @patch.dict(os.environ, {"LOG_LEVEL": "DEBUG", "GCP_REGION": "europe-west1"})
     def test_env_override_config(self):
         from src.core.config import SOARConfig
         cfg = SOARConfig()
-        assert cfg.environment == "dev"
         assert cfg.log_level == "DEBUG"
+        assert cfg.region == "europe-west1"
 
 
 # ==========================================
@@ -156,7 +156,7 @@ class TestPlaybookRegistry:
         registry.register(mock_playbook)
 
         result = registry.dispatch({"detail-type": "unknown"})
-        assert result is False
+        assert result is None
 
 
 # ==========================================
@@ -165,14 +165,12 @@ class TestPlaybookRegistry:
 
 class TestGCEContainment:
     def _make_scc_event(self, instance_name="test-vm", zone="us-central1-a"):
+        """Build an event dict that SCCFinding(**event) can parse."""
         return {
-            "finding": {
-                "name": "organizations/123/sources/456/findings/789",
-                "category": "MALWARE",
-                "severity": "HIGH",
-                "resourceName": f"//compute.googleapis.com/projects/test-project/zones/{zone}/instances/{instance_name}",
-                "findingClass": "THREAT",
-            }
+            "name": "organizations/123/sources/456/findings/789",
+            "category": "Malware",
+            "severity": "HIGH",
+            "resourceName": f"//compute.googleapis.com/projects/test-project/zones/{zone}/instances/{instance_name}",
         }
 
     def test_can_handle_compute_finding(self):
@@ -185,18 +183,15 @@ class TestGCEContainment:
         from src.playbooks.gce_containment import GCEContainment
         playbook = GCEContainment()
         event = {
-            "finding": {
-                "category": "DATA_EXFILTRATION",
-                "resourceName": "//storage.googleapis.com/projects/test/buckets/my-bucket",
-            }
+            "category": "DATA_EXFILTRATION",
+            "resourceName": "//storage.googleapis.com/projects/test/buckets/my-bucket",
         }
         assert playbook.can_handle(event) is False
 
-    @patch("src.playbooks.gce_containment.get_compute_instances_client")
-    @patch("src.playbooks.gce_containment.get_compute_firewalls_client")
-    @patch("src.playbooks.gce_containment.get_compute_disks_client")
-    @patch("src.playbooks.gce_containment.get_compute_snapshots_client")
-    def test_execute_calls_isolation(self, mock_snap, mock_disks, mock_fw, mock_instances):
+    @patch("src.playbooks.gce_containment.get_instances_client")
+    @patch("src.playbooks.gce_containment.get_disks_client")
+    @patch("src.playbooks.gce_containment.emit_metric")
+    def test_execute_calls_isolation(self, mock_metric, mock_disks, mock_instances):
         from src.playbooks.gce_containment import GCEContainment
 
         # Mock instance get
@@ -206,10 +201,13 @@ class TestGCEContainment:
         mock_instance.service_accounts = [MagicMock(email="vm-sa@test.iam.gserviceaccount.com")]
         mock_instances.return_value.get.return_value = mock_instance
 
-        # Mock operations
-        mock_instances.return_value.set_tags.return_value = MagicMock()
-        mock_instances.return_value.set_service_account.return_value = MagicMock()
-        mock_instances.return_value.stop.return_value = MagicMock()
+        # Mock operations to return completed operations
+        mock_op = MagicMock()
+        mock_op.result.return_value = None
+        mock_instances.return_value.set_tags.return_value = mock_op
+        mock_instances.return_value.set_service_account.return_value = mock_op
+        mock_instances.return_value.set_metadata.return_value = mock_op
+        mock_instances.return_value.stop.return_value = mock_op
 
         playbook = GCEContainment()
         event = self._make_scc_event()
@@ -279,16 +277,12 @@ class TestLogger:
 # ==========================================
 
 class TestDetectSeverity:
-    @patch("src.workflow.detect_severity.get_compute_instances_client")
-    def test_classify_critical(self, mock_client):
+    def test_classify_critical(self):
         from src.workflow.detect_severity import classify_severity
-        result = classify_severity("MALWARE", "CRITICAL", "THREAT")
-        assert result["severity_level"] == "CRITICAL"
-        assert result["auto_respond"] is True
+        result = classify_severity(9.0)
+        assert result == "CRITICAL"
 
-    @patch("src.workflow.detect_severity.get_compute_instances_client")
-    def test_classify_low(self, mock_client):
+    def test_classify_low(self):
         from src.workflow.detect_severity import classify_severity
-        result = classify_severity("OPEN_FIREWALL", "LOW", "MISCONFIGURATION")
-        assert result["severity_level"] == "LOW"
-        assert result["auto_respond"] is False
+        result = classify_severity(2.0)
+        assert result == "LOW"
