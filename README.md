@@ -5,9 +5,55 @@
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Serverless](https://img.shields.io/badge/serverless-%23FD5750.svg?style=for-the-badge&logo=serverless&logoColor=white)
 
-This project demonstrates a fully automated, enterprise-grade Serverless Incident Response architecture on Google Cloud Platform (GCP). It detects malicious activity using **Security Command Center (SCC)** and automatically isolates compromised resources while preserving state for forensic investigation.
+Automated security incident response platform that detects threats using Security Command Center and automatically isolates compromised resources while preserving forensic evidence.
 
-## 🏛️ Architecture
+## 🏗️ Architecture Overview
+
+### System Architecture
+```
+Threat Detection → Event Router → Message Queue → Workflow Engine → Workers
+     ↓                    ↓              ↓              ↓           ↓
+GuardDuty/SCC → EventBridge/Eventarc → SQS/PubSub → Step Functions/Cloud Workflows → Container Workers
+```
+
+### GCP Architecture Flow
+```mermaid
+flowchart TD
+    subgraph "Detection Layer"
+        A[Security Command Center] --> D[Eventarc]
+        B[Cloud Audit Logs] --> D
+        C[Threat Detection] --> E[Pub/Sub]
+    end
+    
+    subgraph "Processing Layer"
+        D --> F[Cloud Workflows]
+        E --> G[Cloud Run Workers]
+    end
+    
+    subgraph "Response Layer"
+        F --> H[Isolation Workers]
+        F --> I[Forensics Workers]
+        G --> J[Isolation Workers]
+        G --> K[Forensics Workers]
+    end
+    
+    subgraph "Notification Layer"
+        H --> L[Slack/Jira/SIEM]
+        I --> L
+        J --> L
+        K --> L
+    end
+```
+
+### Workflow Process
+1. **Detection:** SCC detects threats (severity >= 7.0)
+2. **Event Routing:** Eventarc routes to Pub/Sub queue
+3. **Workflow Engine:** Cloud Workflows orchestrates response
+4. **Container Workers:** Cloud Run performs long-running operations
+5. **Human Approval:** Manual approval for critical actions
+6. **Integrations:** Slack, Jira, SIEM notifications
+
+## �️ Architecture
 
 ### 🖼️ High-Level Architecture
 ![Architecture Diagram](images/gcp_soar.png)
@@ -63,158 +109,94 @@ The workflow involves:
    - **Preserve:** Takes a Snapshot of the VM's primary disk with forensic metadata tags attached.
    - **Stop:** Stops the VM to halt local execution.
 
-## 🕵️ Threat Scenario
+## 🛡️ Advanced Features
 
-**Scenario:** An attacker exploits an RCE vulnerability on the VM and starts a crypto miner script.
+### Workflow Engine (Cloud Workflows)
+- **Human approval** workflows for critical actions
+- **Multi-step incident response** with retry logic
+- **Parallel execution** for isolation and forensics
+- **Error handling** and dead letter queue processing
 
-**Detection:** The VM makes outbound HTTP requests to a mining pool. Next Generation Firewall / SCC Threat Detection flags the traffic as `Cryptocurrency mining` (High Severity).
+### Message Queue Layer (Pub/Sub)
+- **Buffer layer** prevents system overload during attacks
+- **Dead Letter Topics** handles failed processing
+- **Batch processing** for improved performance
+- **Cross-project message routing**
 
-**Response:** Within seconds, the SOAR workflow executes. The VM's network connections are severed via tag replacement, its IAM permissions are revoked, the drive is snapshotted for the Blue Team, and the VM is powered down.
+### Container Workers (Cloud Run)
+- **Long-running operations** (15+ minute forensic scans)
+- **Full environment** access for comprehensive analysis
+- **Scalable compute** with auto-scaling
+- **Health monitoring** and graceful degradation
 
-## 🗂️ Project Structure
-- `src/`: Python code for the Cloud Function responders.
-  - `main.py`: Main GCE VM incident response playbook
-  - `storage_exfil_response.py`: Cloud Storage data exfiltration detection and response
-  - `sa_compromise_response.py`: Service account compromise detection and response
-- `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
-- `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
+### Multi-Project Security
+- **Centralized security project** with cross-project roles
+- **SCC organization** configuration
+- **Cross-project incident response** capabilities
+- **Secure identity federation** with external IDs
 
-## 🚀 Deployment Instructions
+### Integrations
+- **Slack/Teams** for real-time notifications
+- **Jira/ServiceNow** for ticket management
+- **SIEM integration** (Chronicle, Splunk, Elastic)
+- **Threat intelligence** feeds
 
-### Prerequisites
-- [Terraform](https://www.terraform.io/downloads.html) installed locally.
-- GCP Cloud SDK (`gcloud`) installed and authenticated (`gcloud auth application-default login`).
-- A GCP Project with Billing Enabled.
-- Required APIs enabled: `compute.googleapis.com`, `cloudfunctions.googleapis.com`, `pubsub.googleapis.com`, `storage.googleapis.com`, `eventarc.googleapis.com`, `cloudbuild.googleapis.com`.
+## 🚀 Deployment
 
-### Setup
-1. Clone the repository and navigate to the terraform directory:
-   ```bash
-   cd terraform
-   ```
-2. Initialize and Apply Terraform:
-   ```bash
-   terraform init
-   
-   # During apply, provide your GCP Project ID
-   terraform apply
-   ```
-
-## ⚔️ Simulation Guide: Triggering SOAR
-
-**Method 1: Direct Pub/Sub Trigger (Instant & Easy)**
-Instead of waiting for Security Command Center to natively pick up a threat, you can directly inject a mock finding into the Pub/Sub topic.
-```bash
-chmod +x attack_simulation/trigger_scc.sh
-
-# Pass your Project ID, Zone, and the Target VM name
-./attack_simulation/trigger_scc.sh my-gcp-project us-central1-a gce-target-01
+### Environment Structure
 ```
-Watch the Cloud Function logs in the GCP Console to see the playbook execute instantly!
+terraform/
+├── modules/                    # Reusable modules
+│   ├── workflows/             # Cloud Workflows
+│   ├── queues/                # Pub/Sub and Eventarc
+│   ├── containers/            # Cloud Run workers
+│   └── security/              # Multi-project security
+├── environments/               # Environment-specific configs
+│   ├── dev/                   # Development environment
+│   ├── staging/               # Staging environment
+│   └── prod/                  # Production environment
+└── existing/                  # Original basic setup
+```
 
-**Method 2: Real simulation on the Target VM (Advanced)**
-1. SSH into the `target_vm_public_ip` (provided in Terraform outputs).
-2. Upload and run the miner script:
-   ```bash
-   chmod +x attack_simulation/gcp_miner.sh
-   ./attack_simulation/gcp_miner.sh
-   ```
-3. Assuming your GCP Project has **Premium tier Security Command Center** enabled, wait 15-30 minutes for SCC to identify the DNS requests and push the finding.
-4. The VM will suddenly drop SSH connection, its Service Account will vanish, and it will shut down. Check the Disks dashboard for the forensic snapshot!
+### Quick Deploy
+```bash
+# Deploy SOAR platform
+cd gcp-serverless-soar
+./scripts/deploy_gcp.sh prod
 
-## 🛡️ Additional Security Playbooks
+# Configure integrations
+gcloud secrets create slack-webhook-url --replication-policy automatic
+echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-file=-
+```
 
-### 1. Cloud Storage Data Exfiltration Detection & Response
-**Detection:** Monitors Cloud Audit Logs for unusual Cloud Storage access patterns:
-- Large volume downloads (>10GB threshold)
-- High frequency access (>1000 operations/24hrs)
-- Multiple source IPs accessing the same bucket
-- Off-hours access patterns
-- Rapid succession downloads
+## 📊 Security Coverage
 
-**Response Actions:**
-- Block user access via IAM policies
-- Enable bucket protection features (versioning, retention policies)
-- Create forensic snapshots of bucket metadata
-- Send security alerts via Pub/Sub
+| Threat Type | Detection | Response Time | Advanced Features |
+|-------------|-----------|---------------|-------------------|
+| GCE Compromise | SCC | < 30s | Workflow approval, container forensics |
+| Storage Exfiltration | Audit Logs | < 60s | Cross-project response, SIEM integration |
+| SA Compromise | Audit Logs | < 45s | Multi-project security, ticketing |
+| DDoS Attacks | VPC Flow Logs | < 15s | Queue buffering, auto-scaling |
 
-**Trigger:** Cloud Audit Logs for `storage.objects.get` operations
+## 🔧 Configuration
 
-### 2. Service Account Compromise Detection & Response
-**Detection:** Analyzes IAM audit events for suspicious service account activities:
-- Unauthorized service account key creation
-- Unusual source IPs accessing service accounts
-- Privilege escalation attempts
-- Suspicious timing patterns
+### Variables
+- `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
+- `approval_wait_time`: Human approval timeout (prod: 3600s, dev: 300s)
+- `enable_multi_project`: Cross-project security (default: true)
+- `enable_integrations`: Slack/Jira/SIEM (default: true)
 
-**Response Actions:**
-- Disable all service account keys
-- Remove from critical IAM roles
-- Create forensic audit logs
-- Send security alerts with detailed analysis
+### Integration Setup
+```bash
+# Slack integration
+gcloud secrets create slack-webhook-url --replication-policy automatic
+echo "WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-file=-
 
-**Trigger:** Cloud Audit Logs for `iam.serviceAccounts.*` operations
+# Jira integration
+gcloud secrets create jira-api-token --replication-policy automatic
+echo "API_TOKEN" | gcloud secrets versions add jira-api-token --data-file=-
 
-## 🎯 Deployment for New Playbooks
-
-To deploy the additional security playbooks:
-
-1. **Storage Exfiltration Response:**
-   ```bash
-   # Deploy Cloud Function
-   gcloud functions deploy storage-exfil-response \
-     --runtime python39 \
-     --trigger-topic cloud-audit-logs \
-     --entry-point storage_exfil_responder \
-     --source src/ \
-     --set-env-vars PROJECT_ID=$PROJECT_ID,ALERT_TOPIC=security-alerts,EXFILTRATION_THRESHOLD=10737418240
-   
-   # Enable Cloud Audit Logging for Storage
-   gcloud logging sinks create storage-audit-sink \
-     pubsub.googleapis.com/projects/$PROJECT_ID/topics/security-alerts \
-     --log-filter='resource.type="gcs_bucket" AND protoPayload.methodName="storage.objects.get"'
-   ```
-
-2. **Service Account Compromise Response:**
-   ```bash
-   # Deploy Cloud Function
-   gcloud functions deploy sa-compromise-response \
-     --runtime python39 \
-     --trigger-topic iam-audit-logs \
-     --entry-point sa_compromise_responder \
-     --source src/ \
-     --set-env-vars PROJECT_ID=$PROJECT_ID,ALERT_TOPIC=security-alerts
-   
-   # Enable Cloud Audit Logging for IAM
-   gcloud logging sinks create iam-audit-sink \
-     pubsub.googleapis.com/projects/$PROJECT_ID/topics/security-alerts \
-     --log-filter='resource.type="iam_service_account" AND protoPayload.methodName="iam.serviceAccounts.*"'
-   ```
-
-## 📊 Security Coverage Matrix
-
-| Threat Type | Detection Source | Response Time | Automated Actions |
-|-------------|------------------|---------------|-------------------|
-| GCE Crypto Mining | Security Command Center | < 30 seconds | Isolate, Snapshot, Stop |
-| Storage Exfiltration | Cloud Audit Logs | < 60 seconds | Block Access, Protect Bucket |
-| SA Compromise | Cloud Audit Logs | < 45 seconds | Disable Keys, Remove Roles |
-| GCE C&C Activity | SCC Threat Detection | < 30 seconds | Isolate, Revoke Sessions |
-
-## ⚡ Scaling & Reliability
-- Cloud Functions Gen2 scale automatically by event volume; tune instance count, memory, and timeout via Terraform.
-- Increase max instances for bursty SCC findings; raise memory/timeout for heavy snapshots and audit log queries.
-- Use min instances to keep responders warm for faster reaction time.
-
-## �🔧 Configuration Options
-
-### Environment Variables
-- `EXFILTRATION_THRESHOLD`: Storage download size threshold (default: 10GB)
-- `ALERT_TOPIC`: Pub/Sub topic for security alerts
-- `PROJECT_ID`: GCP Project ID
-- `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 6)
-
-### Terraform Variables
-- `function_max_instances`: Max instances per Cloud Function
-- `function_min_instances`: Min instances kept warm
-- `function_memory`: Memory size for Cloud Functions
-- `function_timeout_seconds`: Timeout in seconds for Cloud Functions
+# SIEM integration
+gcloud secrets create siem-api-key --replication-policy automatic
+echo "API_KEY" | gcloud secrets versions add siem-api-key --data-file=-
+```
