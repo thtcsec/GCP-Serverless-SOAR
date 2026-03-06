@@ -3,7 +3,8 @@ import json
 import logging
 import urllib.request
 import os
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone, timezone
 from google.cloud import compute_v1, logging as cloud_logging
 import functions_framework
 
