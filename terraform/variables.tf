@@ -26,3 +26,27 @@ variable "forensic_jump_host_ip" {
   type        = string
   default     = "0.0.0.0/0" # Change to actual corporate VPN / Jumpbox IP in real deployment
 }
+
+variable "function_max_instances" {
+  description = "Max instances per Cloud Function for scaling"
+  type        = number
+  default     = 1
+}
+
+variable "function_min_instances" {
+  description = "Min instances kept warm for Cloud Functions"
+  type        = number
+  default     = 0
+}
+
+variable "function_memory" {
+  description = "Memory for Cloud Functions"
+  type        = string
+  default     = "256M"
+}
+
+variable "function_timeout_seconds" {
+  description = "Timeout in seconds for Cloud Functions"
+  type        = number
+  default     = 60
+}
