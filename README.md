@@ -200,6 +200,11 @@ To deploy the additional security playbooks:
 | SA Compromise | Cloud Audit Logs | < 45 seconds | Disable Keys, Remove Roles |
 | GCE C&C Activity | SCC Threat Detection | < 30 seconds | Isolate, Revoke Sessions |
 
+## ⚡ Scaling & Reliability
+- Cloud Functions Gen2 scale automatically by event volume; tune instance count, memory, and timeout via Terraform.
+- Increase max instances for bursty SCC findings; raise memory/timeout for heavy snapshots and audit log queries.
+- Use min instances to keep responders warm for faster reaction time.
+
 ## �🔧 Configuration Options
 
 ### Environment Variables
@@ -207,3 +212,9 @@ To deploy the additional security playbooks:
 - `ALERT_TOPIC`: Pub/Sub topic for security alerts
 - `PROJECT_ID`: GCP Project ID
 - `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 6)
+
+### Terraform Variables
+- `function_max_instances`: Max instances per Cloud Function
+- `function_min_instances`: Min instances kept warm
+- `function_memory`: Memory size for Cloud Functions
+- `function_timeout_seconds`: Timeout in seconds for Cloud Functions
