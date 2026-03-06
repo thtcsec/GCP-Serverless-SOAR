@@ -3,29 +3,60 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
-from google.cloud import storage
+try:
+    from google.cloud import storage
+except Exception:
+    storage = None
 from google.cloud import logging as cloud_logging
-from google.cloud import pubsub_v1
+try:
+    from google.cloud import pubsub_v1
+except Exception:
+    pubsub_v1 = None
 import functions_framework
 
-# Initialize GCP Clients
-storage_client = storage.Client()
-logging_client = cloud_logging.Client()
-publisher = pubsub_v1.PublisherClient()
+storage_client = None
+logging_client = None
+publisher = None
 
 # Configuration
 EXFILTRATION_THRESHOLD = int(os.environ.get('EXFILTRATION_THRESHOLD', '10737418240'))  # 10GB default
 ALERT_TOPIC = os.environ.get('ALERT_TOPIC')
 PROJECT_ID = os.environ.get('PROJECT_ID')
 
-# Structured Cloud Logging setup
-logging_client.setup_logging()
 logger = logging.getLogger("storage-exfil-logger")
 logger.setLevel(logging.INFO)
+
+def setup_logging():
+    global logging_client
+    if getattr(setup_logging, "configured", False):
+        return
+    try:
+        logging_client = cloud_logging.Client()
+        logging_client.setup_logging()
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+    setup_logging.configured = True
+
+def get_storage_client():
+    global storage_client
+    if storage_client is None:
+        if storage is None:
+            raise ImportError("google.cloud.storage is not available")
+        storage_client = storage.Client()
+    return storage_client
+
+def get_publisher():
+    global publisher
+    if publisher is None:
+        if pubsub_v1 is None:
+            raise ImportError("google.cloud.pubsub_v1 is not available")
+        publisher = pubsub_v1.PublisherClient()
+    return publisher
 
 @functions_framework.cloud_event
 def storage_exfil_responder(cloud_event):
     """Entry point for Cloud Function triggered by Cloud Audit Logs."""
+    setup_logging()
     logger.info(f"Received Cloud Event ID: {cloud_event['id']}")
     
     if not cloud_event.data or 'protoPayload' not in cloud_event.data:
@@ -40,6 +71,7 @@ def storage_exfil_responder(cloud_event):
 
 def process_storage_event(payload):
     """Process Cloud Storage audit event for exfiltration detection"""
+    setup_logging()
     method_name = payload.get('methodName', '')
     resource_name = payload.get('resourceName', '')
     principal_email = payload.get('authenticationInfo', {}).get('principalEmail', '')
@@ -244,7 +276,7 @@ def execute_exfiltration_response(bucket_name, principal_email, caller_ip, analy
 def block_user_bucket_access(bucket_name, principal_email):
     """Block user access to the compromised bucket by explicitly removing them from all bindings"""
     try:
-        bucket = storage_client.bucket(bucket_name)
+        bucket = get_storage_client().bucket(bucket_name)
         
         # Get current IAM policy
         policy = bucket.get_iam_policy()
@@ -277,7 +309,7 @@ def block_user_bucket_access(bucket_name, principal_email):
 def enable_bucket_protections(bucket_name):
     """Enable additional bucket protection mechanisms"""
     try:
-        bucket = storage_client.bucket(bucket_name)
+        bucket = get_storage_client().bucket(bucket_name)
         
         # Enable bucket versioning if not already enabled
         if not bucket.versioning_enabled:
@@ -312,7 +344,7 @@ def create_forensic_snapshot(bucket_name, principal_email, analysis):
         }
         
         # Get bucket metadata
-        bucket = storage_client.bucket(bucket_name)
+        bucket = get_storage_client().bucket(bucket_name)
         forensic_data['bucket_metadata'] = {
             'created': bucket.time_created.isoformat() if bucket.time_created else None,
             'updated': bucket.updated.isoformat() if bucket.updated else None,
@@ -322,7 +354,7 @@ def create_forensic_snapshot(bucket_name, principal_email, analysis):
         }
         
         # Store forensic data in a separate bucket
-        forensic_bucket = storage_client.bucket(f"{PROJECT_ID}-forensic-data")
+        forensic_bucket = get_storage_client().bucket(f"{PROJECT_ID}-forensic-data")
         forensic_blob = forensic_bucket.blob(
             f"storage-exfil/{bucket_name}/{principal_email}/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
         )
@@ -357,9 +389,9 @@ def send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis):
         
         # Publish to alert topic
         if ALERT_TOPIC:
-            topic_path = publisher.topic_path(PROJECT_ID, ALERT_TOPIC)
+            topic_path = get_publisher().topic_path(PROJECT_ID, ALERT_TOPIC)
             data = json.dumps(alert_message).encode('utf-8')
-            future = publisher.publish(topic_path, data)
+            future = get_publisher().publish(topic_path, data)
             logger.info(f"Alert published to topic {ALERT_TOPIC}: {future.result()}")
         
         # Also log the alert
