@@ -104,7 +104,7 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "🚨 GCP Security Incident Remediated 🚨",
+                    "text": "GCP Security Incident Remediated",
                     "emoji": True
                 }
             },

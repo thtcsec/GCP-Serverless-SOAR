@@ -7,15 +7,40 @@ This project demonstrates a fully automated Serverless Incident Response archite
 ```mermaid
 graph TD
   A[Attacker] -->|Compromises| B(GCE Target VM)
-  B -->|C&C / Crypto Mining| C{Security Command Center}
-  C -->|High Severity Finding| D[Pub/Sub Topic]
-  D -->|Triggers Subscription| E((Cloud Function))
+  A -->|Data Exfiltration| C[Cloud Storage]
+  A -->|SA Compromise| D[Service Account]
   
-  E -->|1. Change Network Tag| B
-  E -->|2. Detach Service Account| B
-  E -->|3. Block Project SSH Keys| B
-  E -->|4. Take Disk Snapshot| F[(Compute Disk Snapshot)]
-  E -->|5. Stop VM| B
+  B -->|C&C / Crypto Mining| E{Security Command Center}
+  C -->|Unusual Access| F{Cloud Audit Logs}
+  D -->|Suspicious Activity| F
+  
+  E -->|High Severity Finding| G[Pub/Sub Topic]
+  F -->|IAM/Storage Events| G
+  
+  G -->|Triggers Subscription| H((Cloud Function - GCE Response))
+  G -->|Triggers Subscription| I((Cloud Function - Storage Response))
+  G -->|Triggers Subscription| J((Cloud Function - SA Response))
+  
+  H -->|1. Change Network Tag| B
+  H -->|2. Detach Service Account| B
+  H -->|3. Block SSH Keys| B
+  H -->|4. Take Snapshot| K[(Disk Snapshot)]
+  H -->|5. Stop VM| B
+  
+  I -->|1. Block IAM Access| C
+  I -->|2. Enable Versioning| C
+  I -->|3. Set Retention| C
+  I -->|4. Forensic Data| L[(Bucket Metadata)]
+  
+  J -->|1. Disable Keys| D
+  J -->|2. Remove Roles| D
+  J -->|3. Audit Logs| M[IAM Audit]
+  J -->|4. Send Alert| N[Pub/Sub Alert]
+  
+  H -->|6. Send Alert| N
+  I -->|5. Send Alert| N
+  
+  N -->|Security Team| O[Security Admin]
 ```
 
 The workflow involves:
@@ -38,7 +63,10 @@ The workflow involves:
 **Response:** Within seconds, the SOAR workflow executes. The VM's network connections are severed via tag replacement, its IAM permissions are revoked, the drive is snapshotted for the Blue Team, and the VM is powered down.
 
 ## 🗂️ Project Structure
-- `src/`: Python code for the Cloud Function responder.
+- `src/`: Python code for the Cloud Function responders.
+  - `main.py`: Main GCE VM incident response playbook
+  - `storage_exfil_response.py`: Cloud Storage data exfiltration detection and response
+  - `sa_compromise_response.py`: Service account compromise detection and response
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
 - `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
 
@@ -84,3 +112,99 @@ Watch the Cloud Function logs in the GCP Console to see the playbook execute ins
    ```
 3. Assuming your GCP Project has **Premium tier Security Command Center** enabled, wait 15-30 minutes for SCC to identify the DNS requests and push the finding.
 4. The VM will suddenly drop SSH connection, its Service Account will vanish, and it will shut down. Check the Disks dashboard for the forensic snapshot!
+
+## 🛡️ Additional Security Playbooks
+
+### 1. Cloud Storage Data Exfiltration Detection & Response
+**Detection:** Monitors Cloud Audit Logs for unusual Cloud Storage access patterns:
+- Large volume downloads (>10GB threshold)
+- High frequency access (>1000 operations/24hrs)
+- Multiple source IPs accessing the same bucket
+- Off-hours access patterns
+- Rapid succession downloads
+
+**Response Actions:**
+- Block user access via IAM policies
+- Enable bucket protection features (versioning, retention policies)
+- Create forensic snapshots of bucket metadata
+- Send security alerts via Pub/Sub
+
+**Trigger:** Cloud Audit Logs for `storage.objects.get` operations
+
+### 2. Service Account Compromise Detection & Response
+**Detection:** Analyzes IAM audit events for suspicious service account activities:
+- Unauthorized service account key creation
+- Unusual source IPs accessing service accounts
+- Privilege escalation attempts
+- Suspicious timing patterns
+
+**Response Actions:**
+- Disable all service account keys
+- Remove from critical IAM roles
+- Create forensic audit logs
+- Send security alerts with detailed analysis
+
+**Trigger:** Cloud Audit Logs for `iam.serviceAccounts.*` operations
+
+## 🎯 Deployment for New Playbooks
+
+To deploy the additional security playbooks:
+
+1. **Storage Exfiltration Response:**
+   ```bash
+   # Deploy Cloud Function
+   gcloud functions deploy storage-exfil-response \
+     --runtime python39 \
+     --trigger-topic cloud-audit-logs \
+     --entry-point storage_exfil_responder \
+     --source src/ \
+     --set-env-vars PROJECT_ID=$PROJECT_ID,ALERT_TOPIC=security-alerts,EXFILTRATION_THRESHOLD=10737418240
+   
+   # Enable Cloud Audit Logging for Storage
+   gcloud logging sinks create storage-audit-sink \
+     pubsub.googleapis.com/projects/$PROJECT_ID/topics/security-alerts \
+     --log-filter='resource.type="gcs_bucket" AND protoPayload.methodName="storage.objects.get"'
+   ```
+
+2. **Service Account Compromise Response:**
+   ```bash
+   # Deploy Cloud Function
+   gcloud functions deploy sa-compromise-response \
+     --runtime python39 \
+     --trigger-topic iam-audit-logs \
+     --entry-point sa_compromise_responder \
+     --source src/ \
+     --set-env-vars PROJECT_ID=$PROJECT_ID,ALERT_TOPIC=security-alerts
+   
+   # Enable Cloud Audit Logging for IAM
+   gcloud logging sinks create iam-audit-sink \
+     pubsub.googleapis.com/projects/$PROJECT_ID/topics/security-alerts \
+     --log-filter='resource.type="iam_service_account" AND protoPayload.methodName="iam.serviceAccounts.*"'
+   ```
+
+## 📊 Security Coverage Matrix
+
+| Threat Type | Detection Source | Response Time | Automated Actions |
+|-------------|------------------|---------------|-------------------|
+| GCE Crypto Mining | Security Command Center | < 30 seconds | Isolate, Snapshot, Stop |
+| Storage Exfiltration | Cloud Audit Logs | < 60 seconds | Block Access, Protect Bucket |
+| SA Compromise | Cloud Audit Logs | < 45 seconds | Disable Keys, Remove Roles |
+| GCE C&C Activity | SCC Threat Detection | < 30 seconds | Isolate, Revoke Sessions |
+
+## � Additional Architecture Diagrams
+
+For detailed architecture diagrams including:
+- Data Flow Architecture
+- Threat Response Timeline  
+- Component Interaction Map
+- Security Coverage Matrix
+
+See: [ARCHITECTURE_DIAGRAMS.md](../ARCHITECTURE_DIAGRAMS.md)
+
+## �🔧 Configuration Options
+
+### Environment Variables
+- `EXFILTRATION_THRESHOLD`: Storage download size threshold (default: 10GB)
+- `ALERT_TOPIC`: Pub/Sub topic for security alerts
+- `PROJECT_ID`: GCP Project ID
+- `RISK_SCORE_THRESHOLD`: Minimum risk score for automated response (default: 6)
