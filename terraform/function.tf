@@ -42,6 +42,10 @@ resource "google_cloudfunctions2_function" "soar_responder_function" {
     available_memory   = "256M"
     timeout_seconds    = 60
     service_account_email = google_service_account.soar_function_sa.email
+    
+    environment_variables = {
+      SLACK_WEBHOOK_URL = var.slack_webhook_url
+    }
   }
 
   event_trigger {

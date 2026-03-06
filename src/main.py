@@ -1,12 +1,11 @@
 import base64
 import json
 import logging
+import urllib.request
+import os
 from datetime import datetime
 from google.cloud import compute_v1
 import functions_framework
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize GCP Clients
 compute_client = compute_v1.InstancesClient()
@@ -14,6 +13,13 @@ disks_client = compute_v1.DisksClient()
 snapshots_client = compute_v1.SnapshotsClient()
 
 ISOLATION_TAG = 'isolated-vm'
+SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL')
+
+# Structured Cloud Logging setup
+client = google.cloud.logging.Client()
+client.setup_logging()
+logger = logging.getLogger("soar-ir-logger")
+logger.setLevel(logging.INFO)
 
 @functions_framework.cloud_event
 def soar_responder(cloud_event):
@@ -64,16 +70,63 @@ def process_finding(finding):
         logger.error(f"Failed to parse resource name: {resource_name}")
         return
 
-    logger.info(f"Executing SOAR playbook on instance {instance_name} in {zone}")
+    logger.info(f"Executing SOAR playbook on instance {instance_name} in {zone}", extra={
+        "json_fields": {"action": "SOAR_TRIGGER", "instance": instance_name, "zone": zone, "threat": category}
+    })
 
     try:
         isolate_instance(project_id, zone, instance_name)
         detach_service_account(project_id, zone, instance_name)
         take_snapshot(project_id, zone, instance_name, category)
         stop_instance(project_id, zone, instance_name)
-        logger.info(f"SOAR Playbook completed successfully for {instance_name}")
+        
+        logger.info(f"SOAR Playbook completed successfully for {instance_name}", extra={
+            "json_fields": {"action": "SOAR_COMPLETE", "instance": instance_name, "status": "success"}
+        })
+        
+        send_slack_alert(project_id, zone, instance_name, category, severity)
+        
     except Exception as e:
-        logger.error(f"Failed to execute SOAR playbook: {str(e)}")
+        logger.error(f"Failed to execute SOAR playbook: {str(e)}", extra={
+            "json_fields": {"action": "SOAR_ERROR", "error": str(e)}
+        })
+
+def send_slack_alert(project_id, zone, instance_name, category, severity):
+    if not SLACK_WEBHOOK_URL:
+        logger.warning("SLACK_WEBHOOK_URL not configured. Skipping Slack alert.")
+        return
+        
+    message = {
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🚨 GCP Security Incident Remediated 🚨",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Project:*\n{project_id}"},
+                    {"type": "mrkdwn", "text": f"*Zone:*\n{zone}"},
+                    {"type": "mrkdwn", "text": f"*Instance:*\n`{instance_name}`"},
+                    {"type": "mrkdwn", "text": f"*Threat Category:*\n{category}"},
+                    {"type": "mrkdwn", "text": f"*Severity:*\n{severity}"},
+                    {"type": "mrkdwn", "text": f"*SOAR Status:*\n✅ Isolated, SA Detached, Snapshotted, Stopped."}
+                ]
+            }
+        ]
+    }
+    
+    req = urllib.request.Request(SLACK_WEBHOOK_URL, json.dumps(message).encode('utf-8'))
+    req.add_header('Content-Type', 'application/json')
+    try:
+        urllib.request.urlopen(req)
+        logger.info("Sent Slack alert successfully.", extra={"json_fields": {"action": "SLACK_ALERT_SENT"}})
+    except Exception as e:
+        logger.error(f"Failed to send Slack alert: {str(e)}")
 
 
 def isolate_instance(project_id, zone, instance_name):

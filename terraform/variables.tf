@@ -15,8 +15,14 @@ variable "zone" {
   default     = "us-central1-a"
 }
 
-variable "alert_email" {
-  description = "Email address to receive GuardDuty SOAR alerts (Note: GCP uses PubSub/Email integrations or direct Sengrid/Slack webhooks. We will just use standard Cloud Logging here for simplicity, but in a real case add an Email sink)"
+variable "slack_webhook_url" {
+  description = "Slack webhook URL for the Cloud Function to send incident resolution alerts to the SOC team."
   type        = string
-  default     = "admin@example.com"
+  default     = "" # Provide value in terraform.tfvars or CLI during apply
+}
+
+variable "forensic_jump_host_ip" {
+  description = "The IP address (CIDR) of the SOC team's jump shell. Used to SSH into isolated VMs."
+  type        = string
+  default     = "0.0.0.0/0" # Change to actual corporate VPN / Jumpbox IP in real deployment
 }
