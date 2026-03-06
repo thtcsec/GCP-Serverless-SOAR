@@ -197,7 +197,7 @@ terraform/
 ```bash
 # Deploy SOAR platform
 cd gcp-serverless-soar
-./scripts/deploy_gcp.sh prod
+./scripts/deploy.sh prod
 
 # Configure integrations
 gcloud secrets create slack-webhook-url --replication-policy automatic
