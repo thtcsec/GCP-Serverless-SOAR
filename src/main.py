@@ -125,7 +125,7 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
     req = urllib.request.Request(SLACK_WEBHOOK_URL, json.dumps(message).encode('utf-8'))
     req.add_header('Content-Type', 'application/json')
     try:
-        urllib.request.urlopen(req)
+        urllib.request.urlopen(req)  # nosec B310
         logger.info("Sent Slack alert successfully.", extra={"json_fields": {"action": "SLACK_ALERT_SENT"}})
     except Exception as e:
         logger.error(f"Failed to send Slack alert: {str(e)}")
