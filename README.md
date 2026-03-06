@@ -60,54 +60,89 @@ flowchart TD
 
 ### ⚙️ Logical Data Flow (Mermaid)
 ```mermaid
-graph TD
-  A[Attacker] -->|Compromises| B(GCE Target VM)
-  A -->|Data Exfiltration| C[Cloud Storage]
-  A -->|SA Compromise| D[Service Account]
-  
-  B -->|C&C / Crypto Mining| E{Security Command Center}
-  C -->|Unusual Access| F{Cloud Audit Logs}
-  D -->|Suspicious Activity| F
-  
-  E -->|High Severity Finding| G[Pub/Sub Topic]
-  F -->|IAM/Storage Events| G
-  
-  G -->|Triggers Subscription| H((Cloud Function - GCE Response))
-  G -->|Triggers Subscription| I((Cloud Function - Storage Response))
-  G -->|Triggers Subscription| J((Cloud Function - SA Response))
-  
-  H -->|1. Change Network Tag| B
-  H -->|2. Detach Service Account| B
-  H -->|3. Block SSH Keys| B
-  H -->|4. Take Snapshot| K[(Disk Snapshot)]
-  H -->|5. Stop VM| B
-  
-  I -->|1. Block IAM Access| C
-  I -->|2. Enable Versioning| C
-  I -->|3. Set Retention| C
-  I -->|4. Forensic Data| L[(Bucket Metadata)]
-  
-  J -->|1. Disable Keys| D
-  J -->|2. Remove Roles| D
-  J -->|3. Audit Logs| M[IAM Audit]
-  J -->|4. Send Alert| N[Pub/Sub Alert]
-  
-  H -->|6. Send Alert| N
-  I -->|5. Send Alert| N
-  
-  N -->|Security Team| O[Security Admin]
+### ⚙️ Logical Data Flow (Mermaid)
+```mermaid
+sequenceDiagram
+    participant Attacker
+    participant GCE as GCP Compute Engine
+    participant SCC as Security Command Center
+    participant PS as Pub/Sub Topic
+    participant CW as Cloud Workflows
+    participant CR as Cloud Run Workers
+    participant Sec as Security Admin
+
+    Attacker->>GCE: Exploits RCE vulnerability
+    Attacker->>GCE: Downloads Crypto Miner
+    GCE->>Internet: Makes unauthorized DNS queries (Mining Pool)
+    
+    rect rgb(255, 200, 200)
+        Note over SCC,GCE: Detection Phase
+        SCC->>GCE: Analyzes Network & Compute Logs
+        SCC-->>PS: Generates High Severity Finding (Score: 8.5)
+    end
+    
+    rect rgb(200, 220, 255)
+        Note over PS,CW: Orchestration Phase
+        PS-->>CW: Triggers Incident Response Workflow
+        CW->>CW: Validates Finding & Extracts VM/Project ID
+    end
+    
+    rect rgb(255, 230, 200)
+        Note over CW,CR: Automated Response Phase
+        CW->>GCE: Updates Network Tags (isolates VM)
+        CW->>GCE: Blocks Project SSH Keys
+        CW->>IAM: Detaches Service Account from VM
+        CW->>GCE: Triggers Compute Disk Snapshot
+        CW->>GCE: Executes stop_instance()
+    end
+    
+    rect rgb(200, 255, 200)
+        Note over CW,Sec: Forensic & Notification Phase
+        CW->>CR: Dispatches Forensics Worker Container
+        CR->>CR: Mounts Snapshot & Scans for Malware
+        CR-->>CW: Returns Forensic Report
+        CW->>Sec: Sends Slack/Jira Alert with Report
+    end
 ```
 
 The workflow involves:
 1. **Detection:** GCP Security Command Center detects anomalous behavior (e.g., Cryptocurrency mining).
-2. **Event Routing:** SCC pushes the finding event to a Pub/Sub topic.
-3. **Automation Logic:** A Python Cloud Function is triggered by the Pub/Sub message.
+2. **Event Routing:** SCC pushes the finding event to a Pub/Sub topic via Eventarc.
+3. **Automation Logic:** A Cloud Workflows execution is triggered by the Pub/Sub message.
 4. **Resolution (Response Playbook):** 
    - **Isolate:** Replaces the VM's network tags with an `isolated-vm` tag. A pre-configured VPC Firewall rule explicitly denies all ingress and egress to this tag.
    - **Revoke Service Account:** Detaches the IAM Service Account from the VM.
    - **Block SSH:** Sets the instance metadata `block-project-ssh-keys=TRUE` to prevent adversaries from persisting via GCP-wide SSH keys.
    - **Preserve:** Takes a Snapshot of the VM's primary disk with forensic metadata tags attached.
    - **Stop:** Stops the VM to halt local execution.
+
+### Timeline/Response Flow
+```mermaid
+gantt
+    title GCP SOAR Incident Response Timeline
+    dateFormat  s
+    axisFormat  %S
+    
+    section Detection
+    SCC Analyzes Logs           :a1, 0, 10s
+    Eventarc Routes Finding     :a2, after a1, 2s
+    
+    section Automated Response
+    Pub/Sub Buffers Message     :a3, after a2, 1s
+    Workflow Validates Event    :a4, after a3, 2s
+    GCE Network Isolation       :crit, a5, after a4, 3s
+    SA Role Detachment          :crit, a6, after a5, 2s
+    Block SSH Keys              :a7, after a6, 2s
+    
+    section Forensics
+    Compute Disk Snapshotting   :a8, after a7, 15s
+    GCE Instance Shutdown       :a9, after a8, 5s
+    Cloud Run Malware Scan      :a10, after a9, 45s
+    
+    section Notification
+    Compile Final Report        :a11, after a10, 2s
+    Dispatch Slack/Jira Alert   :a12, after a11, 1s
+```
 
 ## 🛡️ Advanced Features
 
