@@ -7,23 +7,48 @@ from datetime import datetime, timezone
 from google.cloud import compute_v1, logging as cloud_logging
 import functions_framework
 
-# Initialize GCP Clients
-compute_client = compute_v1.InstancesClient()
-disks_client = compute_v1.DisksClient()
-snapshots_client = compute_v1.SnapshotsClient()
+compute_client = None
+disks_client = None
+snapshots_client = None
 
 ISOLATION_TAG = 'isolated-vm'
 SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL')
 
-# Structured Cloud Logging setup
-client = cloud_logging.Client()
-client.setup_logging()
 logger = logging.getLogger("soar-ir-logger")
 logger.setLevel(logging.INFO)
+
+def setup_logging():
+    if getattr(setup_logging, "configured", False):
+        return
+    try:
+        client = cloud_logging.Client()
+        client.setup_logging()
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+    setup_logging.configured = True
+
+def get_compute_client():
+    global compute_client
+    if compute_client is None:
+        compute_client = compute_v1.InstancesClient()
+    return compute_client
+
+def get_disks_client():
+    global disks_client
+    if disks_client is None:
+        disks_client = compute_v1.DisksClient()
+    return disks_client
+
+def get_snapshots_client():
+    global snapshots_client
+    if snapshots_client is None:
+        snapshots_client = compute_v1.SnapshotsClient()
+    return snapshots_client
 
 @functions_framework.cloud_event
 def soar_responder(cloud_event):
     """Entry point for the Cloud Function triggered by Pub/Sub."""
+    setup_logging()
     logger.info(f"Received Cloud Event ID: {cloud_event['id']}")
     
     if not cloud_event.data or 'message' not in cloud_event.data:
@@ -40,6 +65,7 @@ def soar_responder(cloud_event):
 
 
 def process_finding(finding):
+    setup_logging()
     severity = finding.get('severity', '')
     category = finding.get('category', '')
     resource_name = finding.get('resourceName', '') # Format: //compute.googleapis.com/projects/.../instances/instance-id
@@ -133,12 +159,13 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
 
 def isolate_instance(project_id, zone, instance_name):
     logger.info(f"Isolating {instance_name} by applying network tag: {ISOLATION_TAG}")
-    instance = compute_client.get(project=project_id, zone=zone, instance=instance_name)
+    client = get_compute_client()
+    instance = client.get(project=project_id, zone=zone, instance=instance_name)
     tags = instance.tags
     
     tags.items = [ISOLATION_TAG] # Overwrite tags
     
-    operation = compute_client.set_tags(
+    operation = client.set_tags(
         project=project_id,
         zone=zone,
         instance=instance_name,
@@ -149,10 +176,11 @@ def isolate_instance(project_id, zone, instance_name):
 
 def detach_service_account(project_id, zone, instance_name):
     logger.info(f"Detaching Service Accounts from {instance_name}")
-    instance = compute_client.get(project=project_id, zone=zone, instance=instance_name)
+    client = get_compute_client()
+    instance = client.get(project=project_id, zone=zone, instance=instance_name)
     
     # Pass empty service accounts list to detach
-    operation = compute_client.set_service_account(
+    operation = client.set_service_account(
         project=project_id,
         zone=zone,
         instance=instance_name,
@@ -167,7 +195,8 @@ def block_project_ssh_keys(project_id, zone, instance_name):
     logger.info(f"Blocking project-wide SSH keys for {instance_name} to prevent backdoor access")
     
     # Needs to get the instance fingerprint first to update metadata
-    instance = compute_client.get(project=project_id, zone=zone, instance=instance_name)
+    client = get_compute_client()
+    instance = client.get(project=project_id, zone=zone, instance=instance_name)
     metadata = instance.metadata
     
     # Find existing items and update or append
@@ -185,7 +214,7 @@ def block_project_ssh_keys(project_id, zone, instance_name):
         
     metadata.items = items
     
-    operation = compute_client.set_metadata(
+    operation = client.set_metadata(
         project=project_id,
         zone=zone,
         instance=instance_name,
@@ -197,7 +226,8 @@ def block_project_ssh_keys(project_id, zone, instance_name):
 
 def take_snapshot(project_id, zone, instance_name, threat_category):
     logger.info(f"Taking snapshot of boot disk for {instance_name}")
-    instance = compute_client.get(project=project_id, zone=zone, instance=instance_name)
+    client = get_compute_client()
+    instance = client.get(project=project_id, zone=zone, instance=instance_name)
     
     # Find boot disk
     boot_disk_url = next((d.source for d in instance.disks if d.boot), None)
@@ -219,7 +249,7 @@ def take_snapshot(project_id, zone, instance_name, threat_category):
         }
     )
 
-    operation = disks_client.create_snapshot(
+    operation = get_disks_client().create_snapshot(
         project=project_id,
         zone=zone,
         disk=disk_name,
@@ -231,5 +261,5 @@ def take_snapshot(project_id, zone, instance_name, threat_category):
 
 def stop_instance(project_id, zone, instance_name):
     logger.info(f"Stopping instance {instance_name}")
-    operation = compute_client.stop(project=project_id, zone=zone, instance=instance_name)
+    operation = get_compute_client().stop(project=project_id, zone=zone, instance=instance_name)
     # Don't strictly need to wait for result.
