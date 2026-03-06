@@ -27,5 +27,17 @@ resource "google_project_iam_member" "soar_disk_admin" {
   member  = "serviceAccount:${google_service_account.soar_function_sa.email}"
 }
 
+resource "google_project_iam_member" "soar_iam_admin" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountAdmin"
+  member  = "serviceAccount:${google_service_account.soar_function_sa.email}"
+}
+
+resource "google_project_iam_member" "soar_project_iam_admin" {
+  project = var.project_id
+  role    = "roles/resourcemanager.projectIamAdmin"
+  member  = "serviceAccount:${google_service_account.soar_function_sa.email}"
+}
+
 # 2. Allow event routing from PubSub (Cloud function invoker) is handled automatically 
 # by Cloud Functions gen2 with Eventarc when we create the binding in function.tf.

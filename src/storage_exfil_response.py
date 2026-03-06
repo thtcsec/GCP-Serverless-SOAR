@@ -2,7 +2,7 @@ import base64
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google.cloud import storage
 from google.cloud import logging as cloud_logging
 from google.cloud import pubsub_v1
@@ -148,7 +148,7 @@ def get_recent_storage_logs(principal_email, bucket_name, hours=24):
     try:
         # This would typically use Cloud Logging queries
         # For demo purposes, we'll simulate the analysis
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
         
         # Query Cloud Logging for storage audit logs
@@ -306,7 +306,7 @@ def create_forensic_snapshot(bucket_name, principal_email, analysis):
             'bucket_name': bucket_name,
             'principal_email': principal_email,
             'analysis': analysis,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'bucket_metadata': {},
             'recent_access_logs': []
         }
@@ -324,7 +324,7 @@ def create_forensic_snapshot(bucket_name, principal_email, analysis):
         # Store forensic data in a separate bucket
         forensic_bucket = storage_client.bucket(f"{PROJECT_ID}-forensic-data")
         forensic_blob = forensic_bucket.blob(
-            f"storage-exfil/{bucket_name}/{principal_email}/{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.json"
+            f"storage-exfil/{bucket_name}/{principal_email}/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
         )
         
         forensic_blob.upload_from_string(
@@ -347,7 +347,7 @@ def send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis):
             'principal_email': principal_email,
             'caller_ip': caller_ip,
             'analysis': analysis,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'response_actions': [
                 'User bucket access blocked',
                 'Bucket protections enabled',

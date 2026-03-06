@@ -3,7 +3,7 @@ import json
 import logging
 import urllib.request
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from google.cloud import compute_v1
 import functions_framework
 
@@ -95,8 +95,8 @@ def process_finding(finding):
 
 def send_slack_alert(project_id, zone, instance_name, category, severity, finding_id):
     if not SLACK_WEBHOOK_URL:
-        logger.warning("SLACK_WEBHOOK_URL not configured. Skipping Slack alert.")
-        return
+        logger.error("SLACK_WEBHOOK_URL not configured. Cannot send Slack alert.")
+        raise ValueError("Missing essential configuration: SLACK_WEBHOOK_URL")
         
     message = {
         "blocks": [
@@ -206,7 +206,7 @@ def take_snapshot(project_id, zone, instance_name, threat_category):
         return
 
     disk_name = boot_disk_url.split('/')[-1]
-    timestamp_slug = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+    timestamp_slug = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
     snapshot_name = f"forensic-snapshot-{instance_name}-{timestamp_slug}"
 
     snapshot_resource = compute_v1.Snapshot(

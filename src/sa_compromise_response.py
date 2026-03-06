@@ -2,7 +2,7 @@ import base64
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from google.cloud import iam_admin_v1
 from google.cloud import logging as cloud_logging
 from google.cloud import pubsub_v1
@@ -85,7 +85,7 @@ def is_unusual_source(payload):
 
 def is_suspicious_timing():
     """Check if current time is suspicious"""
-    hour = datetime.now().hour
+    hour = datetime.now(timezone.utc).hour
     return hour >= 23 or hour <= 5
 
 def execute_sa_response(sa_email, principal_email, risk_score, payload):
@@ -170,7 +170,7 @@ def send_sa_alert(sa_email, principal_email, risk_score, payload):
             'principal_email': principal_email,
             'risk_score': risk_score,
             'method_name': payload.get('methodName'),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'actions_taken': ['SA keys disabled', 'Critical roles removed']
         }
         
