@@ -4,7 +4,7 @@ import logging
 import urllib.request
 import os
 from datetime import datetime, timezone
-from google.cloud import compute_v1
+from google.cloud import compute_v1, logging as cloud_logging
 import functions_framework
 
 # Initialize GCP Clients
@@ -16,7 +16,7 @@ ISOLATION_TAG = 'isolated-vm'
 SLACK_WEBHOOK_URL = os.environ.get('SLACK_WEBHOOK_URL')
 
 # Structured Cloud Logging setup
-client = google.cloud.logging.Client()
+client = cloud_logging.Client()
 client.setup_logging()
 logger = logging.getLogger("soar-ir-logger")
 logger.setLevel(logging.INFO)
