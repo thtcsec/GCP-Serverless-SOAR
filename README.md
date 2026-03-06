@@ -200,16 +200,6 @@ To deploy the additional security playbooks:
 | SA Compromise | Cloud Audit Logs | < 45 seconds | Disable Keys, Remove Roles |
 | GCE C&C Activity | SCC Threat Detection | < 30 seconds | Isolate, Revoke Sessions |
 
-## � Additional Architecture Diagrams
-
-For detailed architecture diagrams including:
-- Data Flow Architecture
-- Threat Response Timeline  
-- Component Interaction Map
-- Security Coverage Matrix
-
-See: [ARCHITECTURE_DIAGRAMS.md](../ARCHITECTURE_DIAGRAMS.md)
-
 ## �🔧 Configuration Options
 
 ### Environment Variables
