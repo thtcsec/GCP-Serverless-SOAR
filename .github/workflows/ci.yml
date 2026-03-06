@@ -33,5 +33,7 @@ jobs:
         bandit -r src -ll -ii
         
     - name: Run Pytest
+      env:
+        PYTHONPATH: .
       run: |
         pytest tests/
