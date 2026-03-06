@@ -13,9 +13,11 @@ from google.cloud import compute_v1
 
 from ..clients.gcp import get_instances_client, get_disks_client
 from ..core.config import config
+from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
 from ..models.events import SCCFinding
 
 logger = logging.getLogger("gcp-soar.playbook.gce")
+tracer = get_tracer("gcp-soar.playbook.gce")
 
 ALLOWED_CATEGORIES = ["Cryptocurrency mining", "Backdoor", "Malware"]
 
@@ -39,29 +41,33 @@ class GCEContainment:
             return False
 
     def execute(self, event_data: Dict[str, Any]) -> bool:
-        finding = SCCFinding(**event_data)
-        project_id, zone, instance_name = self._parse_resource(finding.resource_name)
+        with PlaybookTimer("GCEContainment"):
+            finding = SCCFinding(**event_data)
+            project_id, zone, instance_name = self._parse_resource(finding.resource_name)
 
-        if not instance_name:
-            logger.error("Cannot extract instance details from resource name")
-            return False
+            if not instance_name:
+                logger.error("Cannot extract instance details from resource name")
+                return False
 
-        logger.info(
-            f"Executing GCE containment for {instance_name}",
-            extra={"json_fields": {"action": "GCE_CONTAINMENT", "instance": instance_name}},
-        )
+            logger.info(
+                f"Executing GCE containment for {instance_name}",
+                extra={"json_fields": {"action": "GCE_CONTAINMENT", "instance": instance_name}},
+            )
+            emit_metric("findings_processed", 1.0, {"playbook": "GCEContainment"})
 
-        try:
-            self._isolate_instance(project_id, zone, instance_name)
-            self._detach_service_account(project_id, zone, instance_name)
-            self._block_ssh_keys(project_id, zone, instance_name)
-            self._take_snapshot(project_id, zone, instance_name, finding.category)
-            self._stop_instance(project_id, zone, instance_name)
-            logger.info(f"GCE containment completed for {instance_name}")
-            return True
-        except Exception as exc:
-            logger.error(f"GCE containment failed for {instance_name}: {exc}")
-            return False
+            try:
+                with tracer.start_as_current_span("gce_containment") as span:
+                    span.set_attribute("instance", instance_name)
+                    self._isolate_instance(project_id, zone, instance_name)
+                    self._detach_service_account(project_id, zone, instance_name)
+                    self._block_ssh_keys(project_id, zone, instance_name)
+                    self._take_snapshot(project_id, zone, instance_name, finding.category)
+                    self._stop_instance(project_id, zone, instance_name)
+                logger.info(f"GCE containment completed for {instance_name}")
+                return True
+            except Exception as exc:
+                logger.error(f"GCE containment failed for {instance_name}: {exc}")
+                return False
 
     # ------------------------------------------------------------------ #
     # Helpers

@@ -216,3 +216,70 @@ resource "google_storage_bucket_iam_member" "sink_writer" {
   role   = "roles/storage.objectCreator"
   member = google_logging_project_sink.soar_audit_sink.writer_identity
 }
+
+# ==========================================
+# Event Threat Detection (ETD) via SCC
+# ETD is part of SCC Premium. We enable the required API
+# and create a notification config to route ETD findings to Pub/Sub.
+# ==========================================
+
+# Enable Security Command Center API
+resource "google_project_service" "securitycenter_api" {
+  project = var.project_id
+  service = "securitycenter.googleapis.com"
+
+  disable_dependent_services = false
+  disable_on_destroy         = false
+}
+
+# Enable Event Threat Detection API
+resource "google_project_service" "etd_api" {
+  project = var.project_id
+  service = "eventarc.googleapis.com"
+
+  disable_dependent_services = false
+  disable_on_destroy         = false
+}
+
+# Pub/Sub topic for ETD findings
+resource "google_pubsub_topic" "etd_findings" {
+  name    = "${var.environment}-soar-etd-findings"
+  project = var.project_id
+
+  labels = merge(
+    var.labels,
+    {
+      environment = var.environment
+      purpose     = "etd-findings"
+    }
+  )
+}
+
+# SCC Notification Config — routes ETD findings to Pub/Sub
+# NOTE: Requires Organization-level SCC or project-level SCC Premium
+resource "google_scc_project_notification_config" "etd_notifications" {
+  config_id    = "${var.environment}-etd-findings"
+  project      = var.project_id
+  description  = "Route Event Threat Detection findings to Pub/Sub"
+  pubsub_topic = google_pubsub_topic.etd_findings.id
+
+  streaming_config {
+    filter = "category=\"MALWARE\" OR category=\"CRYPTO_MINING\" OR category=\"BRUTE_FORCE\" OR category=\"PERSISTENCE\" OR category=\"INITIAL_ACCESS\" OR category=\"DEFENSE_EVASION\""
+  }
+
+  depends_on = [google_project_service.securitycenter_api]
+}
+
+# Grant Cloud Monitoring metrics writer role to SOAR SA
+resource "google_project_iam_member" "soar_monitoring_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.soar_central_sa.email}"
+}
+
+# Grant Cloud Trace agent role to SOAR SA
+resource "google_project_iam_member" "soar_trace_agent" {
+  project = var.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.soar_central_sa.email}"
+}

@@ -1,7 +1,22 @@
 # Default VPC Network
 resource "google_compute_network" "soar_vpc" {
   name                    = "soar-vpc"
-  auto_create_subnetworks = true
+  auto_create_subnetworks = false
+}
+
+# Custom Subnet with VPC Flow Logs enabled
+resource "google_compute_subnetwork" "soar_subnet" {
+  name          = "soar-subnet"
+  ip_cidr_range = "10.0.1.0/24"
+  region        = var.region
+  network       = google_compute_network.soar_vpc.id
+
+  log_config {
+    aggregation_interval = "INTERVAL_5_SEC"
+    flow_sampling        = 1.0
+    metadata             = "INCLUDE_ALL_METADATA"
+    filter_expr          = "true"
+  }
 }
 
 # Firewall: Allow SSH for testing

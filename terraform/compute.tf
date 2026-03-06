@@ -20,7 +20,8 @@ resource "google_compute_instance" "target_vm" {
   }
 
   network_interface {
-    network = google_compute_network.soar_vpc.name
+    network    = google_compute_network.soar_vpc.name
+    subnetwork = google_compute_subnetwork.soar_subnet.name
     access_config {
       // Ephemeral public IP
     }

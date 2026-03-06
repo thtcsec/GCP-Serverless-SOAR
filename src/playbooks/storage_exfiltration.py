@@ -12,9 +12,11 @@ from typing import Any, Dict, List
 
 from ..clients.gcp import get_storage_client, get_publisher
 from ..core.config import config
+from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
 from ..models.events import StorageAuditEvent
 
 logger = logging.getLogger("gcp-soar.playbook.storage")
+tracer = get_tracer("gcp-soar.playbook.storage")
 
 
 class StorageExfiltration:
@@ -28,32 +30,37 @@ class StorageExfiltration:
             return False
 
     def execute(self, event_data: Dict[str, Any]) -> bool:
-        evt = StorageAuditEvent(**event_data)
-        payload = evt.proto_payload
+        with PlaybookTimer("StorageExfiltration"):
+            evt = StorageAuditEvent(**event_data)
+            payload = evt.proto_payload
 
-        bucket_name = self._extract_bucket(payload.resource_name)
-        if not bucket_name:
-            logger.warning("Cannot extract bucket name")
-            return False
+            bucket_name = self._extract_bucket(payload.resource_name)
+            if not bucket_name:
+                logger.warning("Cannot extract bucket name")
+                return False
 
-        principal = payload.authentication_info.principal_email
-        caller_ip = payload.request.get("callerIp", "")
-        analysis = self._analyse_patterns(principal, bucket_name)
+            principal = payload.authentication_info.principal_email
+            caller_ip = payload.request.get("callerIp", "")
+            analysis = self._analyse_patterns(principal, bucket_name)
 
-        if not analysis["is_exfiltration"]:
-            return True
+            if not analysis["is_exfiltration"]:
+                return True
 
-        logger.warning(f"Exfiltration detected on {bucket_name} by {principal}")
+            logger.warning(f"Exfiltration detected on {bucket_name} by {principal}")
+            emit_metric("findings_processed", 1.0, {"playbook": "StorageExfiltration"})
 
-        try:
-            self._block_user(bucket_name, principal)
-            self._enable_protections(bucket_name)
-            self._create_forensic_copy(bucket_name, principal, analysis)
-            self._send_alert(bucket_name, principal, caller_ip, analysis)
-            return True
-        except Exception as exc:
-            logger.error(f"Storage response failed for {bucket_name}: {exc}")
-            return False
+            try:
+                with tracer.start_as_current_span("storage_exfiltration") as span:
+                    span.set_attribute("bucket", bucket_name)
+                    span.set_attribute("principal", principal)
+                    self._block_user(bucket_name, principal)
+                    self._enable_protections(bucket_name)
+                    self._create_forensic_copy(bucket_name, principal, analysis)
+                    self._send_alert(bucket_name, principal, caller_ip, analysis)
+                return True
+            except Exception as exc:
+                logger.error(f"Storage response failed for {bucket_name}: {exc}")
+                return False
 
     # ------------------------------------------------------------------ #
     # helpers

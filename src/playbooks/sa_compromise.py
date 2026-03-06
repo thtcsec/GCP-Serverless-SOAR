@@ -11,9 +11,11 @@ from typing import Any, Dict
 
 from ..clients.gcp import get_iam_client, get_publisher, get_resource_manager_client
 from ..core.config import config
+from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
 from ..models.events import IAMAuditEvent
 
 logger = logging.getLogger("gcp-soar.playbook.sa")
+tracer = get_tracer("gcp-soar.playbook.sa")
 
 HIGH_RISK_METHODS = [
     "CreateServiceAccountKey",
@@ -43,29 +45,34 @@ class SACompromise:
             return False
 
     def execute(self, event_data: Dict[str, Any]) -> bool:
-        evt = IAMAuditEvent(**event_data)
-        payload = evt.proto_payload
+        with PlaybookTimer("SACompromise"):
+            evt = IAMAuditEvent(**event_data)
+            payload = evt.proto_payload
 
-        sa_email = self._extract_sa_email(payload.resource_name)
-        if not sa_email:
-            logger.warning("Cannot extract SA email from resource name")
-            return False
+            sa_email = self._extract_sa_email(payload.resource_name)
+            if not sa_email:
+                logger.warning("Cannot extract SA email from resource name")
+                return False
 
-        risk_score = self._calculate_risk(payload)
-        if risk_score < 7:
-            logger.info(f"Risk score {risk_score} below threshold for {sa_email}")
-            return True  # handled but no action needed
+            risk_score = self._calculate_risk(payload)
+            if risk_score < 7:
+                logger.info(f"Risk score {risk_score} below threshold for {sa_email}")
+                return True  # handled but no action needed
 
-        logger.warning(f"SA compromise detected: {sa_email} (score={risk_score})")
+            logger.warning(f"SA compromise detected: {sa_email} (score={risk_score})")
+            emit_metric("findings_processed", 1.0, {"playbook": "SACompromise"})
 
-        try:
-            self._disable_keys(sa_email)
-            self._remove_critical_roles(sa_email)
-            self._send_alert(sa_email, payload.authentication_info.principal_email, risk_score)
-            return True
-        except Exception as exc:
-            logger.error(f"SA response failed for {sa_email}: {exc}")
-            return False
+            try:
+                with tracer.start_as_current_span("sa_compromise") as span:
+                    span.set_attribute("service_account", sa_email)
+                    span.set_attribute("risk_score", risk_score)
+                    self._disable_keys(sa_email)
+                    self._remove_critical_roles(sa_email)
+                    self._send_alert(sa_email, payload.authentication_info.principal_email, risk_score)
+                return True
+            except Exception as exc:
+                logger.error(f"SA response failed for {sa_email}: {exc}")
+                return False
 
     # ------------------------------------------------------------------ #
 

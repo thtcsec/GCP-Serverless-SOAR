@@ -56,3 +56,15 @@ def get_resource_manager_client():
     """Return the Resource Manager v3 projects client."""
     from google.cloud import resourcemanager_v3
     return resourcemanager_v3.ProjectsClient()
+
+
+def get_monitoring_client():
+    """Return the Cloud Monitoring MetricServiceClient."""
+    from google.cloud import monitoring_v3
+    return monitoring_v3.MetricServiceClient()
+
+
+def get_trace_exporter():
+    """Return the Cloud Trace exporter for OpenTelemetry."""
+    from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter
+    return CloudTraceSpanExporter()

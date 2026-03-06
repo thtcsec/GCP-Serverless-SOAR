@@ -22,3 +22,13 @@ output "audit_log_sink_name" {
   description = "Name of the audit log sink"
   value       = google_logging_project_sink.soar_audit_sink.name
 }
+
+output "etd_findings_topic_id" {
+  description = "Pub/Sub topic ID for ETD findings"
+  value       = google_pubsub_topic.etd_findings.id
+}
+
+output "etd_notification_config_name" {
+  description = "SCC notification config name for ETD"
+  value       = google_scc_project_notification_config.etd_notifications.name
+}
