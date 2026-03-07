@@ -225,6 +225,11 @@ echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-f
 
 ## 🔧 Configuration
 
+### Local Development Environment
+A `.env.example` file is provided in the repository root documenting all OS environment variables used by the playbooks.
+- For local testing, copy this file to `.env` and adjust the values.
+- In production, these parameters are securely injected into the Cloud Functions runtime by Terraform.
+
 ### Variables
 - `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
 - `approval_wait_time`: Human approval timeout (prod: 3600s, dev: 300s)
