@@ -8,6 +8,11 @@ os.environ['ALERT_TOPIC'] = 'test-topic'
 
 import src.sa_compromise_response as resp
 
+if 'PROJECT_ID' in os.environ:
+    del os.environ['PROJECT_ID']
+if 'ALERT_TOPIC' in os.environ:
+    del os.environ['ALERT_TOPIC']
+
 def make_cloud_event(method_name='iam.serviceAccounts.createKey', 
                      sa_email='test@project.iam.gserviceaccount.com',
                      caller_ip='1.2.3.4'):

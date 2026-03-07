@@ -10,6 +10,10 @@ os.environ['EXFILTRATION_THRESHOLD'] = '1000'
 
 import src.storage_exfil_response as resp
 
+for env_var in ['PROJECT_ID', 'ALERT_TOPIC', 'EXFILTRATION_THRESHOLD']:
+    if env_var in os.environ:
+        del os.environ[env_var]
+
 def make_cloud_event(method_name='storage.objects.get', 
                      bucket_name='test-bucket',
                      object_name='test-obj',
