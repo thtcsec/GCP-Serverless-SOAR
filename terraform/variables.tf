@@ -50,3 +50,9 @@ variable "function_timeout_seconds" {
   type        = number
   default     = 60
 }
+
+variable "notification_channels" {
+  description = "List of Cloud Monitoring notification channel IDs for alert policies"
+  type        = list(string)
+  default     = []
+}
