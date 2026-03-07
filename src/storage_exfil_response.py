@@ -4,12 +4,12 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta, timezone
 try:
-    from google.cloud import storage
+    from google.cloud import storage  # type: ignore[attr-defined]
 except Exception:
     storage = None
 from google.cloud import logging as cloud_logging
 try:
-    from google.cloud import pubsub_v1
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 except Exception:
     pubsub_v1 = None
 import functions_framework

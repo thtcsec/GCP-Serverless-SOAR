@@ -9,7 +9,7 @@ except Exception:
     iam_admin_v1 = None
 from google.cloud import logging as cloud_logging
 try:
-    from google.cloud import pubsub_v1
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 except Exception:
     pubsub_v1 = None
 import functions_framework

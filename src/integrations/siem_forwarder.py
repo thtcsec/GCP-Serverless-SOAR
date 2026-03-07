@@ -29,7 +29,7 @@ class SIEMForwarder:
 
     def _load_from_secrets(self) -> None:
         try:
-            from google.cloud import secretmanager
+            from google.cloud import secretmanager  # type: ignore[attr-defined]
 
             client = secretmanager.SecretManagerServiceClient()
             project_id = os.environ.get("PROJECT_ID", "")

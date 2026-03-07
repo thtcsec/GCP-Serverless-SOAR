@@ -7,7 +7,7 @@ from functools import lru_cache
 
 from google.cloud import compute_v1
 from google.cloud import logging as cloud_logging
-from google.cloud import storage
+from google.cloud import storage  # type: ignore[attr-defined]
 
 
 @lru_cache(maxsize=1)

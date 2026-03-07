@@ -18,9 +18,9 @@ def emit_metric(
 ) -> None:
     """Write a custom monitoring metric to Cloud Monitoring."""
     try:
-        from google.cloud import monitoring_v3
+        from google.cloud import monitoring_v3  # type: ignore[attr-defined]
         from google.api import metric_pb2
-        from google.protobuf import timestamp_pb2
+        from google.protobuf import timestamp_pb2  # type: ignore[import-untyped]
         from ..clients.gcp import get_monitoring_client
 
         client = get_monitoring_client()

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from google.auth import impersonated_credentials, default as auth_default
-from google.cloud import compute_v1, storage
+from google.cloud import compute_v1, storage  # type: ignore[attr-defined]
 
 logger = logging.getLogger("gcp-soar.cross_project")
 

@@ -83,7 +83,7 @@ def _send_to_dlq(message: Dict[str, Any]) -> None:
         logger.error("DLQ_TOPIC or PROJECT_ID not set — dropping message")
         return
 
-    from google.cloud import pubsub_v1
+    from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 
     publisher = pubsub_v1.PublisherClient()
     topic_path = publisher.topic_path(PROJECT_ID, DLQ_TOPIC)

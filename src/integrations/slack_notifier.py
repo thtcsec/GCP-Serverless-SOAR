@@ -30,7 +30,7 @@ def _get_webhook_url() -> str:
 
     # Fallback: fetch from Secret Manager
     try:
-        from google.cloud import secretmanager
+        from google.cloud import secretmanager  # type: ignore[attr-defined]
 
         client = secretmanager.SecretManagerServiceClient()
         project_id = os.environ.get("PROJECT_ID", "")
@@ -138,6 +138,6 @@ def send_approval_request(instance_name: str, action: str, approval_url: str = "
     }
     if approval_url:
         payload["blocks"].append(
-            {"type": "actions", "elements": [{"type": "button", "text": {"type": "plain_text", "text": "Approve"}, "url": approval_url}]}
+            {"type": "actions", "elements": [{"type": "button", "text": {"type": "plain_text", "text": "Approve"}, "url": approval_url}]}  # type: ignore[list-item]
         )
     return _post(url, payload)

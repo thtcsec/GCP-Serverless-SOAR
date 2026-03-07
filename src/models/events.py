@@ -54,7 +54,7 @@ class SCCFinding(BaseModel):
     event_time: Optional[str] = Field(None, alias="eventTime")
     create_time: Optional[str] = Field(None, alias="createTime")
     source_properties: Dict[str, Any] = Field(default_factory=dict, alias="sourceProperties")
-    resource: SCCResource = Field(default_factory=SCCResource)
+    resource: SCCResource = Field(default_factory=lambda: SCCResource())  # type: ignore[call-arg]
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -83,7 +83,7 @@ class AuditLogPayload(BaseModel):
     resource_name: str = Field("", alias="resourceName")
     service_name: str = Field("", alias="serviceName")
     authentication_info: AuthenticationInfo = Field(
-        default_factory=AuthenticationInfo, alias="authenticationInfo"
+        default_factory=lambda: AuthenticationInfo(), alias="authenticationInfo"  # type: ignore[call-arg]
     )
     status: Dict[str, Any] = Field(default_factory=dict)
     request: Dict[str, Any] = Field(default_factory=dict)
