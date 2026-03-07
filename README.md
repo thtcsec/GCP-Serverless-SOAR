@@ -1,4 +1,4 @@
-# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
+﻿# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
 
 ![GCP](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
@@ -53,12 +53,16 @@ flowchart TD
 5. **Human Approval:** Manual approval for critical actions
 6. **Integrations:** Slack, Jira, SIEM notifications
 
-## �️ Architecture
-
 ### 🖼️ High-Level Architecture
 ![Architecture Diagram](images/gcp_soar.png)
 
-### ⚙️ Logical Data Flow (Mermaid)
+## 🕵️ Threat Scenario
+
+**Scenario:** An attacker discovers a Remote Code Execution (RCE) vulnerability on your public-facing application and installs a Monero cryptocurrency miner.
+
+**Detection:** The malware begins making outbound DNS requests to known mining pools. GCP Security Command Center analyzes the logs and flags the instance with a *High-Severity* finding.
+
+### ⚙️ Logical Data Flow
 ```mermaid
 sequenceDiagram
     participant Attacker
@@ -103,16 +107,13 @@ sequenceDiagram
     end
 ```
 
-The workflow involves:
-1. **Detection:** GCP Security Command Center detects anomalous behavior (e.g., Cryptocurrency mining).
-2. **Event Routing:** SCC pushes the finding event to a Pub/Sub topic via Eventarc.
-3. **Automation Logic:** A Cloud Workflows execution is triggered by the Pub/Sub message.
-4. **Resolution (Response Playbook):** 
-   - **Isolate:** Replaces the VM's network tags with an `isolated-vm` tag. A pre-configured VPC Firewall rule explicitly denies all ingress and egress to this tag.
-   - **Revoke Service Account:** Detaches the IAM Service Account from the VM.
-   - **Block SSH:** Sets the instance metadata `block-project-ssh-keys=TRUE` to prevent adversaries from persisting via GCP-wide SSH keys.
-   - **Preserve:** Takes a Snapshot of the VM's primary disk with forensic metadata tags attached.
-   - **Stop:** Stops the VM to halt local execution.
+**Response Flow:**
+1. Within seconds, the SOAR workflow executes.
+2. The instance is isolated by replacing network tags with an `isolated-vm` tag, blocking all ingress and egress.
+3. The IAM Service Account is detached from the VM.
+4. SSH keys are blocked at the project level (`block-project-ssh-keys=TRUE`).
+5. A snapshot of the VM's primary disk is taken for the Blue Team.
+6. The VM is stopped to halt local execution.
 
 ### Timeline/Response Flow
 ```mermaid
@@ -174,7 +175,18 @@ gantt
 - **SIEM integration** (Chronicle, Splunk, Elastic)
 - **Threat intelligence** feeds
 
+## 🗂️ Project Structure
+- `src/`: Python code for the Cloud Functions and Cloud Run responders.
+- `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
+- `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
+- `containers/`: Cloud Run forensic worker configuration.
+
 ## 🚀 Deployment
+
+### Prerequisites
+- [Terraform](https://www.terraform.io/downloads.html) installed locally.
+- Google Cloud SDK (`gcloud`) installed and configured.
+- A GCP Project with billing enabled.
 
 ### Environment Structure
 ```
