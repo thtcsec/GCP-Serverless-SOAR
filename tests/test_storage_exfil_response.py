@@ -219,6 +219,9 @@ class TestStorageExfilResponse:
         mock_source = MagicMock()
         mock_source.time_created = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
         mock_source.updated = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+        mock_source.storage_class = 'STANDARD'
+        mock_source.location = 'US'
+        mock_source.versioning_enabled = True
         
         mock_dest = MagicMock()
         mock_blob = MagicMock()

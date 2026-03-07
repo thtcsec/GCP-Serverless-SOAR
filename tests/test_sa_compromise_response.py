@@ -119,10 +119,10 @@ class TestSACompromiseResponse:
         mock_get_iam.side_effect = Exception("Err")
         resp.disable_sa_keys("test_sa") # should cover exception
 
-    @patch('src.sa_compromise_response.resourcemanager_v3')
-    def test_remove_critical_roles(self, mock_rm):
+    @patch('google.cloud.resourcemanager_v3.ProjectsClient')
+    def test_remove_critical_roles(self, mock_rm_client):
         mock_client = MagicMock()
-        mock_rm.ProjectsClient.return_value = mock_client
+        mock_rm_client.return_value = mock_client
         
         mock_binding1 = MagicMock()
         mock_binding1.role = 'roles/editor'
@@ -143,7 +143,7 @@ class TestSACompromiseResponse:
         resp.remove_critical_roles("test_sa")
         mock_client.set_iam_policy.assert_not_called()
 
-        mock_rm.ProjectsClient.side_effect = Exception("Err")
+        mock_rm_client.side_effect = Exception("Err")
         resp.remove_critical_roles("test_sa")
 
     @patch('src.sa_compromise_response.get_publisher')
