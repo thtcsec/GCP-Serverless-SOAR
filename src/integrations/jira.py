@@ -8,22 +8,22 @@ logger = logging.getLogger(__name__)
 
 # Fetch Jira settings from environment variables
 JIRA_URL = os.environ.get('JIRA_URL')
-JIRA_USERNAME = os.environ.get('JIRA_USERNAME')
+JIRA_USER = os.environ.get('JIRA_USER')
 JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN')
 JIRA_PROJECT_KEY = os.environ.get('JIRA_PROJECT_KEY', 'SEC')
 
 
-def create_jira_issue(instance_id: str, finding_type: str, severity: str, action_taken: str):
+def create_jira_issue(instance_id: str, finding_type: str, severity: float, action_taken: str):
     """
     Creates an incident tracking ticket in Jira to document the SOAR finding.
     Returns the Jira Issue Key if successful, else None.
     """
     jira_url = JIRA_URL
-    jira_user = JIRA_USERNAME
+    jira_user = JIRA_USER
     jira_token = JIRA_API_TOKEN
     
     if not jira_url or not jira_user or not jira_token:
-        logger.warning("Jira config incomplete (missing JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN). Skipping Jira Ticket.")
+        logger.warning("Jira config incomplete (missing JIRA_URL, JIRA_USER, JIRA_API_TOKEN). Skipping Jira Ticket.")
         return None
 
     # We assume Jira Cloud API v2
@@ -40,10 +40,10 @@ def create_jira_issue(instance_id: str, finding_type: str, severity: str, action
     }
     
     description = (
-        f"Automated Security Incident Response triggered by Serverless SOAR (GCP).\n\n"
+        f"Automated Security Incident Response triggered by Serverless SOAR.\n\n"
         f"*Instance ID:* {instance_id}\n"
         f"*Finding Type:* {finding_type}\n"
-        f"*Severity:* {severity}\n\n"
+        f"*Severity Score:* {severity}\n\n"
         f"*Response Actions Initiated Automatically:*\n{action_taken}\n\n"
         f"Please review the forensic snapshots for further investigation."
     )
@@ -51,7 +51,7 @@ def create_jira_issue(instance_id: str, finding_type: str, severity: str, action
     payload = {
         "fields": {
             "project": {"key": JIRA_PROJECT_KEY},
-            "summary": f"[SOAR Alert] GCP Threat Detected on {instance_id}",
+            "summary": f"[SOAR Alert] Threat Detected on {instance_id}",
             "description": description,
             "issuetype": {"name": "Bug"}
         }

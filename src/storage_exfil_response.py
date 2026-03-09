@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone, timedelta, timezone
+import src.integrations as integrations
 try:
     from google.cloud import storage  # type: ignore[attr-defined]
 except Exception:
@@ -98,12 +99,40 @@ def process_storage_event(payload):
     if exfil_analysis['is_exfiltration']:
         logger.warning(f"Data exfiltration detected by {principal_email} on bucket {bucket_name}")
         
-        # Execute response playbook
+        # --- THREAT INTEL ENRICHMENT & SCORING ---
+        risk_data = {"risk_score": 0.0, "decision": "AUTO_ISOLATE"}
+        intel_report = {}
+
+        if caller_ip:
+            # Use safe decision for logging
+            decision = risk_data.get('decision', 'AUTO_ISOLATE')
+            logger.info(f"Enriching GCP Storage finding with Intel for IP: {caller_ip} (Decision: {decision})")
+            intel_service = integrations.ThreatIntelService()
+            intel_report = intel_service.get_ip_report(caller_ip)
+            
+            scoring_engine = integrations.ScoringEngine()
+            # Scale analysis['risk_score'] (0-10ish) to engine expectations
+            risk_data = scoring_engine.calculate_risk_score(intel_report, float(exfil_analysis['risk_score']))
+            
+            logger.info(f"Scoring Result: {json.dumps(risk_data, default=str)}")
+            
+            if risk_data.get('decision') == "IGNORE":
+                logger.info("Risk Score too low. Skipping remediation.")
+                return
+
+            if risk_data.get('decision') == "REQUIRE_APPROVAL":
+                logger.info("Requires manual approval.")
+                send_exfiltration_alert(bucket_name, principal_email, caller_ip, exfil_analysis, risk_data, intel_report, approved=False)
+                return
+
+        # Execute response playbook (AUTO_ISOLATE)
         execute_exfiltration_response(
             bucket_name, 
             principal_email, 
             caller_ip, 
-            exfil_analysis
+            exfil_analysis,
+            risk_data,
+            intel_report
         )
 
 def extract_bucket_name(resource_name):
@@ -251,7 +280,7 @@ def is_rapid_succession(logs):
     
     return rapid_count > 50  # More than 50 rapid downloads
 
-def execute_exfiltration_response(bucket_name, principal_email, caller_ip, analysis):
+def execute_exfiltration_response(bucket_name, principal_email, caller_ip, analysis, risk_data=None, intel_report=None):
     """Execute automated response to data exfiltration"""
     try:
         logger.info(f"Executing exfiltration response for bucket {bucket_name}")
@@ -266,7 +295,7 @@ def execute_exfiltration_response(bucket_name, principal_email, caller_ip, analy
         create_forensic_snapshot(bucket_name, principal_email, analysis)
         
         # Step 4: Send security alert
-        send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis)
+        send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis, risk_data, intel_report, approved=True)
         
         logger.info(f"Exfiltration response completed for bucket {bucket_name}")
         
@@ -369,33 +398,47 @@ def create_forensic_snapshot(bucket_name, principal_email, analysis):
     except Exception as e:
         logger.error(f"Error creating forensic snapshot: {str(e)}")
 
-def send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis):
+def send_exfiltration_alert(bucket_name, principal_email, caller_ip, analysis, risk_data=None, intel_report=None, approved=True):
     """Send security alert about data exfiltration"""
     try:
+        action_status = "AUTOMATED RESPONSE EXECUTED" if approved else "PENDING APPROVAL"
+        
         alert_message = {
             'alert_type': 'DATA_EXFILTRATION',
             'severity': 'HIGH',
             'bucket_name': bucket_name,
             'principal_email': principal_email,
             'caller_ip': caller_ip,
-            'analysis': analysis,
+            'risk_score': risk_data.get('risk_score') if risk_data else analysis.get('risk_score'),
+            'decision': risk_data.get('decision') if risk_data else 'AUTO_ISOLATE',
+            'analysis_summary': {
+                'total_bytes': analysis.get('total_bytes'),
+                'access_count': analysis.get('access_count')
+            },
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'response_actions': [
+            'actions_taken': [
                 'User bucket access blocked',
                 'Bucket protections enabled',
                 'Forensic snapshot created'
-            ]
+            ] if approved else ['Detection Only'],
+            'approved': approved
         }
         
         # Publish to alert topic
         if ALERT_TOPIC:
             topic_path = get_publisher().topic_path(PROJECT_ID, ALERT_TOPIC)
-            data = json.dumps(alert_message).encode('utf-8')
-            future = get_publisher().publish(topic_path, data)
-            logger.info(f"Alert published to topic {ALERT_TOPIC}: {future.result()}")
+            data = json.dumps(alert_message, default=str).encode('utf-8')
+            get_publisher().publish(topic_path, data)
         
-        # Also log the alert
-        logger.warning(f"DATA EXFILTRATION ALERT: {json.dumps(alert_message, indent=2)}")
+        logger.warning(f"DATA EXFILTRATION ALERT ({action_status}): {json.dumps(alert_message, indent=2, default=str)}")
         
+        # Optional Jira integration
+        try:
+            from src.integrations.jira import create_jira_issue
+            desc = f"Exfiltration from {bucket_name} by {principal_email}\nAction: {action_status}\nIntel: {json.dumps(intel_report, indent=2, default=str)}"
+            create_jira_issue(bucket_name, "STORAGE_EXFIL", 9, desc)
+        except Exception as e:
+            logger.error(f"Failed to invoke Jira integration: {e}")
+            
     except Exception as e:
         logger.error(f"Error sending exfiltration alert: {str(e)}")

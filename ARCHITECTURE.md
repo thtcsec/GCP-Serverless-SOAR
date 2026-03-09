@@ -1,24 +1,28 @@
-# 🧠 How it Works: GCP Serverless SOAR (Simplified)
+# 🧠 Internal Architecture: GCP Serverless SOAR
 
-Think of this system as an **Automatic Quarantine Chamber** for your Google Cloud servers.
+An advanced **Security Orchestration** framework using multi-source signal enrichment for automated incident response.
 
-## 1. Key Roles (The Cast)
+## 1. Core Pillars
 
-*   **Security Command Center - SCC (The Watchtower):** This is Google's built-in security center. It scans your projects for vulnerabilities or suspicious behavior (e.g., Cryptocurrency mining).
-*   **Pub/Sub (The Courier):** When SCC detects a thief, it writes an alarm letter and drops it into the Pub/Sub mailbox.
-*   **Cloud Functions (The Responder):** As soon as a letter arrives in the mailbox, this "Robot" (your Python code) awakens to handle the scene.
-*   **Cloud Armor / Firewall (The Barrier):** The keys used to lock the thief inside.
+*   **Ingestion (SCC & Cloud Audit Logs):** Real-time monitoring of Service Account (SA) misuse and Storage bucket exfiltration patterns.
+*   **Enrichment Engine:**
+    *   **VirusTotal Integration:** Cross-references source IPs against global threat databases (~70 engines).
+    *   **AbuseIPDB Integration:** Filters out scanners and known brute-force bots based on community-sourced reputation scores.
+*   **Orchestration (Scoring Engine):**
+    *   Translates raw signals into actionable **Risk Scores**.
+    *   Automated decision logic: `AUTO_ISOLATE` for critical threats, `REQUIRE_APPROVAL` for suspicious telemetry.
+*   **Execution (Cloud Functions):** Event-triggered responders that execute surgical remediation playbooks.
 
-## 2. The Automated "Remediation" Flow
+## 2. Automated Remediation Flow
 
-1.  **Alarm:** SCC detects malware on a Virtual Machine (GCE) and sends a signal.
-2.  **Trigger:** The Cloud Function receives the signal and starts its "Playbook."
-3.  **Action:** The "Robot" performs these steps in a flash:
-    *   **Isolation:** Applies the `isolated-vm` Network Tag. Instantly, all Firewall rules kick in to block all traffic. The hacker loses connection.
-    *   **SSH Block:** Disables project-wide SSH keys for that machine, preventing any "backdoor" access.
-    *   **SA Detach:** Removes the Service Account (permissions) from the machine so the hacker can't reach your databases or file buckets.
-    *   **Snapshot:** Creates a backup "image" of the drive so you can investigate the "crime scene" later.
-4.  **Notify:** Opens a **Jira Incident Ticket** to keep a record for the security team.
+1.  **Signal:** SCC detects a suspicious Service Account key creation or high-volume data download from Cloud Storage.
+2.  **Analysis:** The system enriches the finding with external Threat Intel. If the IP has a high **Abuse Confidence Score**, it triggers isolation.
+3.  **Action (Surgical Response):**
+    *   **Identity Lockdown:** Disables SA keys and removes critical IAM roles (Project Editor/Owner).
+    *   **Network Isolation:** Blocks egress traffic via Cloud Armor or dynamic Firewall tags.
+    *   **Bucket Protection:** Enables S3/Storage Versioning and Object Lock to prevent data tampering.
+    *   **Evidence:** Captures persistent disk snapshots for IR teams.
+4.  **Governance:** Publishes full incident context to Pub/Sub and creates a **Jira** forensic record.
 
 ## 3. Why This Is Powerful
 *   **Total Automation:** If a hack happens at 3:00 AM, the system locks the hacker out while you sleep.

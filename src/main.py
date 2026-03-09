@@ -7,6 +7,7 @@ from datetime import datetime
 from datetime import timezone, timezone
 from google.cloud import compute_v1, logging as cloud_logging
 import functions_framework
+import src.integrations as integrations
 
 compute_client = None
 disks_client = None
@@ -102,6 +103,46 @@ def process_finding(finding):
         "json_fields": {"action": "SOAR_TRIGGER", "instance": instance_name, "zone": zone, "threat": category, "finding_id": finding_id}
     })
 
+    # --- THREAT INTEL ENRICHMENT & SCORING ---
+    source_ip = None
+    indicator = finding.get('indicator', {})
+    ip_addresses = indicator.get('ipAddresses', [])
+    if ip_addresses:
+        source_ip = ip_addresses[0]
+    
+    if not source_ip:
+        connections = finding.get('connections', [])
+        for conn in connections:
+            remote_ip = conn.get('destinationIp') or conn.get('sourceIp')
+            if remote_ip:
+                source_ip = remote_ip
+                break
+
+    risk_data = {"risk_score": 0.0, "decision": "AUTO_ISOLATE"}
+    intel_report = {}
+
+    if source_ip:
+        logger.info(f"Enriching GCP finding with Intel for IP: {source_ip}")
+        intel_service = integrations.ThreatIntelService()
+        intel_report = intel_service.get_ip_report(source_ip)
+        
+        scoring_engine = integrations.ScoringEngine()
+        # Scale severity: SCC HIGH -> 8.0, CRITICAL -> 10.0
+        base_severity = 10.0 if severity == 'CRITICAL' else 8.0
+        risk_data = scoring_engine.calculate_risk_score(intel_report, base_severity)
+        
+        logger.info(f"Scoring Result: {json.dumps(risk_data)}")
+        
+        if risk_data['decision'] == "IGNORE":
+            logger.info("Risk Score too low. Skipping remediation.")
+            return
+
+        if risk_data['decision'] == "REQUIRE_APPROVAL":
+            logger.info("Requires manual approval.")
+            send_slack_alert(project_id, zone, instance_name, category, severity, finding_id, risk_data, intel_report, approved=False)
+            return
+
+    # Execute response playbook (AUTO_ISOLATE)
     try:
         isolate_instance(project_id, zone, instance_name)
         detach_service_account(project_id, zone, instance_name)
@@ -113,25 +154,36 @@ def process_finding(finding):
             "json_fields": {"action": "SOAR_COMPLETE", "instance": instance_name, "status": "success", "finding_id": finding_id}
         })
         
-        send_slack_alert(project_id, zone, instance_name, category, severity, finding_id)
+        send_slack_alert(project_id, zone, instance_name, category, severity, finding_id, risk_data, intel_report, approved=True)
         
     except Exception as e:
         logger.error(f"Failed to execute SOAR playbook: {str(e)}", extra={
             "json_fields": {"action": "SOAR_ERROR", "error": str(e), "finding_id": finding_id}
         })
 
-def send_slack_alert(project_id, zone, instance_name, category, severity, finding_id):
+def send_slack_alert(project_id, zone, instance_name, category, severity, finding_id, risk_data=None, intel_report=None, approved=True):
     if not SLACK_WEBHOOK_URL:
         logger.error("SLACK_WEBHOOK_URL not configured. Cannot send Slack alert.")
-        raise ValueError("Missing essential configuration: SLACK_WEBHOOK_URL")
+        return
         
+    action_status = "✅ Remediated (Auto-Isolated)" if approved else "⏳ PENDING APPROVAL (High Risk)"
+    
+    score_fields = []
+    if risk_data:
+        score_fields = [
+            {"type": "mrkdwn", "text": f"*Risk Score:*\n{risk_data['risk_score']}/100"},
+            {"type": "mrkdwn", "text": f"*Decision:*\n{risk_data['decision']}"},
+            {"type": "mrkdwn", "text": f"*VT Malicious:*\n{risk_data['breakdown'].get('vt_malicious', 0)}"},
+            {"type": "mrkdwn", "text": f"*Abuse Score:*\n{risk_data['breakdown'].get('abuse_confidence', 0)}"}
+        ]
+
     message = {
         "blocks": [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "GCP Security Incident Remediated",
+                    "text": f"GCP SOAR Alert: {action_status}",
                     "emoji": True
                 }
             },
@@ -139,15 +191,40 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
                 "type": "section",
                 "fields": [
                     {"type": "mrkdwn", "text": f"*Project:*\n{project_id}"},
-                    {"type": "mrkdwn", "text": f"*Zone:*\n{zone}"},
                     {"type": "mrkdwn", "text": f"*Instance:*\n`{instance_name}`"},
-                    {"type": "mrkdwn", "text": f"*Threat Category:*\n{category}"},
-                    {"type": "mrkdwn", "text": f"*SCC Finding ID:*\n`{finding_id}`"},
-                    {"type": "mrkdwn", "text": f"*SOAR Status:*\n✅ Isolated, SA Detached, Project SSH Blocked, Snapshotted, Stopped."}
+                    {"type": "mrkdwn", "text": f"*Threat:*\n{category}"},
+                    {"type": "mrkdwn", "text": f"*Severity:*\n{severity}"}
+                ] + score_fields
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"*Finding ID:* {finding_id} | *Status:* {'Auto-Remediated' if approved else 'Awaiting Human Approval'}"}
                 ]
             }
         ]
     }
+    
+    # If pending approval, add interactive buttons
+    if not approved:
+        message["blocks"].append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Approve Isolation"},
+                    "style": "danger",
+                    "value": f"approve_{finding_id}",
+                    "action_id": "approve_action"
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Ignore / False Positive"},
+                    "value": f"ignore_{finding_id}",
+                    "action_id": "ignore_action"
+                }
+            ]
+        })
     
     req = urllib.request.Request(SLACK_WEBHOOK_URL, json.dumps(message).encode('utf-8'))
     req.add_header('Content-Type', 'application/json')
@@ -159,9 +236,10 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
 
     # Kick off Jira Integration to generate an ITIL incident ticket
     try:
-        from integrations.jira import create_jira_issue
-        action_str = "✅ Isolated (Network Tag), SA Detached, Project SSH Blocked, Snapshotted, Stopped."
-        create_jira_issue(instance_name, category, severity, action_str)
+        from src.integrations.jira import create_jira_issue
+        action_str = "✅ Remediated" if approved else "⏳ Pending Approval"
+        desc = f"{category} on {instance_name}. {action_str}\nRisk Score: {risk_data.get('risk_score') if risk_data else 'N/A'}"
+        create_jira_issue(instance_name, category, severity, desc)
     except Exception as e:
         logger.error(f"Failed to invoke Jira integration: {e}")
 

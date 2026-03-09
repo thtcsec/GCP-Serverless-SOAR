@@ -175,7 +175,8 @@ gantt
 - **Slack/Teams** for real-time notifications
 - **Jira/ServiceNow** for ticket management
 - **SIEM integration** (Chronicle, Splunk, Elastic)
-- **Threat intelligence** feeds
+- **Threat intelligence** feeds (VirusTotal, AbuseIPDB)
+- **Automated Scoring Engine** for decision-based orchestration
 
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
@@ -233,12 +234,12 @@ echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-f
 
 ## 📊 Security Coverage
 
-| Threat Type | Detection | Response Time | Advanced Features |
-|-------------|-----------|---------------|-------------------|
-| GCE Compromise | SCC | < 30s | Workflow approval, container forensics |
-| Storage Exfiltration | Audit Logs | < 60s | Cross-project response, SIEM integration |
-| SA Compromise | Audit Logs | < 45s | Multi-project security, ticketing |
-| DDoS Attacks | VPC Flow Logs | < 15s | Queue buffering, auto-scaling |
+| Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
+|-------------|-----------|---------------|---------------|-------------------|
+| GCE Compromise | SCC | < 30s | Scoring Engine | Workflow approval, container forensics |
+| Storage Exfiltration | Audit Logs | < 60s | Scoring Engine | Multi-Intel enrichment, SIEM integration |
+| SA Compromise | Audit Logs | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
+| DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
 
 ## 🔧 Configuration
 

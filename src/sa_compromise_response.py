@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from datetime import datetime, timezone, timedelta, timezone
+import src.integrations as integrations
 try:
     from google.cloud import iam_admin_v1
 except Exception:
@@ -76,10 +77,36 @@ def process_sa_event(payload):
         return
     
     risk_score = calculate_sa_risk_score(payload)
+    caller_ip = payload.get('request', {}).get('callerIp', '')
     
-    if risk_score >= 7:
-        logger.warning(f"Service account compromise detected: {sa_email}")
-        execute_sa_response(sa_email, principal_email, risk_score, payload)
+    # --- THREAT INTEL ENRICHMENT & SCORING ---
+    risk_data = {"risk_score": 0.0, "decision": "AUTO_ISOLATE"}
+    intel_report = {}
+
+    if caller_ip:
+        logger.info(f"Enriching GCP SA finding with Intel for IP: {caller_ip}")
+        intel_service = integrations.ThreatIntelService()
+        intel_report = intel_service.get_ip_report(caller_ip)
+        
+        scoring_engine = integrations.ScoringEngine()
+        # Scale SA risk_score (0-10) to engine expectations
+        risk_data = scoring_engine.calculate_risk_score(intel_report, risk_score)
+        
+        logger.info(f"Scoring Result: {json.dumps(risk_data, default=str)}")
+        
+        if risk_data.get('decision') == "IGNORE":
+            logger.info("Risk Score too low. Skipping remediation.")
+            return
+
+        if risk_data.get('decision') == "REQUIRE_APPROVAL":
+            logger.info("Requires manual approval.")
+            send_sa_alert(sa_email, principal_email, risk_data, payload, approved=False, intel_report=intel_report)
+            return
+
+    # Execute response (AUTO_ISOLATE)
+    decision = risk_data.get('decision', 'AUTO_ISOLATE')
+    logger.warning(f"Confirmed high-risk SA compromise: {sa_email} (Decision: {decision})")
+    execute_sa_response(sa_email, principal_email, risk_data, payload, intel_report=intel_report)
 
 def extract_sa_email(resource_name):
     """Extract service account email from resource name"""
@@ -121,7 +148,7 @@ def is_suspicious_timing():
     hour = datetime.now(timezone.utc).hour
     return hour >= 23 or hour <= 5
 
-def execute_sa_response(sa_email, principal_email, risk_score, payload):
+def execute_sa_response(sa_email, principal_email, risk_data, payload, intel_report=None):
     """Execute automated response to SA compromise"""
     try:
         # Disable SA keys
@@ -131,7 +158,7 @@ def execute_sa_response(sa_email, principal_email, risk_score, payload):
         remove_critical_roles(sa_email)
         
         # Send alert
-        send_sa_alert(sa_email, principal_email, risk_score, payload)
+        send_sa_alert(sa_email, principal_email, risk_data, payload, approved=True, intel_report=intel_report)
         
     except Exception as e:
         logger.error(f"Error executing SA response: {str(e)}")
@@ -194,26 +221,41 @@ def remove_critical_roles(sa_email):
     except Exception as e:
         logger.error(f"Error removing critical roles: {str(e)}")
 
-def send_sa_alert(sa_email, principal_email, risk_score, payload):
+def send_sa_alert(sa_email, principal_email, risk_data, payload, approved=True, intel_report=None):
     """Send security alert about SA compromise"""
     try:
+        action_status = "AUTOMATED RESPONSE EXECUTED" if approved else "PENDING APPROVAL"
+        
         alert = {
             'alert_type': 'SERVICE_ACCOUNT_COMPROMISE',
             'severity': 'HIGH',
             'service_account': sa_email,
             'principal_email': principal_email,
-            'risk_score': risk_score,
+            'risk_score': risk_data.get('risk_score') if risk_data else 'N/A',
+            'decision': risk_data.get('decision') if risk_data else 'AUTO_ISOLATE',
             'method_name': payload.get('methodName'),
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'actions_taken': ['SA keys disabled', 'Critical roles removed']
+            'actions_taken': ['SA keys disabled', 'Critical roles removed'] if approved else ['Detection Only'],
+            'approved': approved,
+            'intel_summary': {
+                'vt_malicious': risk_data.get('breakdown', {}).get('vt_malicious') if risk_data else 0
+            }
         }
         
         if ALERT_TOPIC:
             topic_path = get_publisher().topic_path(PROJECT_ID, ALERT_TOPIC)
-            data = json.dumps(alert).encode('utf-8')
+            data = json.dumps(alert, default=str).encode('utf-8')
             get_publisher().publish(topic_path, data)
         
-        logger.warning(f"SA COMPROMISE ALERT: {json.dumps(alert)}")
+        logger.warning(f"SA COMPROMISE ALERT ({action_status}): {json.dumps(alert)}")
         
+        # Optional Jira integration
+        try:
+            from src.integrations.jira import create_jira_issue
+            desc = f"SA Compromise: {sa_email} by {principal_email}\nAction: {action_status}\nIntel: {json.dumps(intel_report, indent=2)}"
+            create_jira_issue(sa_email, "SA_COMPROMISE", 9, desc)
+        except Exception as e:
+            logger.error(f"Failed to invoke Jira integration: {e}")
+            
     except Exception as e:
         logger.error(f"Error sending SA alert: {str(e)}")

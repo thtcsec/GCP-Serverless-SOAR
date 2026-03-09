@@ -1,24 +1,28 @@
-# 🧠 Cách thức hoạt động: GCP Serverless SOAR (Bản đơn giản)
+# 🧠 Kiến trúc Nội bộ: GCP Serverless SOAR
 
-Hãy tưởng tượng hệ thống này giống như một **Phòng cách ly tự động** cho các máy chủ Google Cloud của bạn.
+Một khung làm việc **Điều phối Bảo mật (Security Orchestration)** nâng cao, sử dụng làm giàu tín hiệu từ nhiều nguồn để tự động hóa phản ứng sự cố.
 
-## 1. Các thành phần chính (Vai diễn)
+## 1. Các trụ cột chính
 
-*   **Security Command Center - SCC (Trạm gác):** Trung tâm an ninh của Google. Nó quét dự án để tìm mã độc hoặc hành vi đào tiền ảo trái phép.
-*   **Pub/Sub (Bưu tá):** Khi SCC thấy trộm, nó viết thư báo động và bỏ vào hòm thư Pub/Sub.
-*   **Cloud Functions (Robot phản ứng):** Ngay khi có thư, con Robot này (Code Python) sẽ thức dậy để xử lý hiện trường.
-*   **Cloud Armor / Firewall (Tường lửa):** Những chiếc khóa dùng để nhốt kẻ trộm lại.
+*   **Thu thập (SCC & Cloud Audit Logs):** Giám sát thời gian thực các hành vi lạm dụng Service Account (SA) và các mẫu exfiltration (thoát dữ liệu) từ Storage bucket.
+*   **Bộ máy Làm giàu (Enrichment Engine):**
+    *   **Tích hợp VirusTotal:** Đối soát IP nguồn với cơ sở dữ liệu mối đe dọa toàn cầu (~70 engines).
+    *   **Tích hợp AbuseIPDB:** Loại bỏ các máy quét (scanners) và bot brute-force đã biết dựa trên điểm uy tín từ cộng đồng.
+*   **Điều phối (Scoring Engine):**
+    *   Chuyển đổi các tín hiệu thô thành **Điểm rủi ro (Risk Scores)** có thể hành động.
+    *   Logic quyết định tự động: `AUTO_ISOLATE` cho các mối đe dọa nghiêm trọng, `REQUIRE_APPROVAL` cho các tín hiệu nghi vấn.
+*   **Thực thi (Cloud Functions):** Các responder kích hoạt theo sự kiện, thực hiện các kịch bản phản ứng (playbooks) một cách chính xác.
 
-## 2. Luồng xử lý tự động
+## 2. Luồng Xử lý Tự động
 
-1.  **Báo động:** SCC phát hiện mã độc trên máy ảo (GCE) và phát tín hiệu.
-2.  **Kích hoạt:** Cloud Function nhận tín hiệu và bắt đầu "vào việc".
-3.  **Hành động (Playbook):** Con Robot thực hiện các bước sau cực nhanh:
-    *   **Isolation (Cách ly):** Gán tag `isolated-vm`. Ngay lập tức Firewall chặn đứng mọi truy cập. Hacker bị mất kết nối.
-    *   **SSH Block (Khóa cửa):** Vô hiệu hóa các chìa khóa SSH toàn dự án đối với máy đó, chặn mọi "cửa sau".
-    *   **SA Detach (Tước quyền):** Gỡ bỏ Service Account (quyền hạn) để hacker không thể lục lọi các folder dữ liệu khác của bạn.
-    *   **Snapshot (Chụp ảnh):** Chụp ảnh ổ cứng máy đó để bạn điều tra "hiện trường" sau này.
-4.  **Thông báo:** Tạo một **Jira Ticket** để lưu hồ sơ an ninh.
+1.  **Tín hiệu:** SCC phát hiện việc tạo khóa Service Account đáng ngờ hoặc tải xuống dữ liệu khối lượng lớn từ Cloud Storage.
+2.  **Phân tích:** Hệ thống làm giàu thông tin bằng Tình báo mối đe dọa bên ngoài. Nếu IP có **Abuse Confidence Score** cao, hệ thống sẽ kích hoạt cách ly.
+3.  **Hành động (Phản ứng chính xác):**
+    *   **Khóa danh tính:** Vô hiệu hóa các khóa SA và gỡ bỏ các vai trò IAM quan trọng (Project Editor/Owner).
+    *   **Cách ly mạng:** Chặn lưu lượng ra bằng Cloud Armor hoặc các tag Firewall động.
+    *   **Bảo vệ dữ liệu:** Kích hoạt S3/Storage Versioning và Object Lock để ngăn chặn việc sửa đổi dữ liệu.
+    *   **Chứng cứ:** Chụp snapshot các đĩa cứng để phục vụ đội IR.
+4.  **Quản trị:** Xuất bản đầy đủ bối cảnh sự cố lên Pub/Sub và tạo hồ sơ pháp y trên **Jira**.
 
 ## 3. Tại sao hệ thống này lại xịn?
 *   **Tự động 100%:** Trộm vào lúc 3 giờ sáng, hệ thống tự nhốt trộm lại khi bạn đang ngủ.
