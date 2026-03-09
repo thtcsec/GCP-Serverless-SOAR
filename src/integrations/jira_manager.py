@@ -5,11 +5,10 @@ Creates and manages Jira tickets for incident response
 
 import json
 import os
-import boto3
 import logging
 import requests  # type: ignore
 from datetime import datetime, timezone
-from botocore.exceptions import ClientError
+
 from requests.auth import HTTPBasicAuth  # type: ignore
 
 # Configure logging
@@ -23,33 +22,15 @@ class JiraManager:
     """Advanced Jira integration for incident ticket management"""
     
     def __init__(self):
-        self.ssm_client = boto3.client('ssm')
         self.jira_config = self._get_jira_config()
         
     def _get_jira_config(self):
-        """Retrieve Jira configuration from AWS Systems Manager Parameter Store"""
-        try:
-            url_response = self.ssm_client.get_parameter(
-                Name='/soar/jira/url',
-                WithDecryption=True
-            )
-            username_response = self.ssm_client.get_parameter(
-                Name='/soar/jira/username',
-                WithDecryption=True
-            )
-            token_response = self.ssm_client.get_parameter(
-                Name='/soar/jira/api_token',
-                WithDecryption=True
-            )
-            
-            return {
-                'url': url_response['Parameter']['Value'],
-                'username': username_response['Parameter']['Value'],
-                'api_token': token_response['Parameter']['Value']
-            }
-        except ClientError as e:
-            logger.error(f"Failed to retrieve Jira configuration: {str(e)}")
-            raise
+        """Retrieve Jira configuration from environment variables"""
+        return {
+            'url': os.environ.get('JIRA_URL', ''),
+            'username': os.environ.get('JIRA_USERNAME', ''),
+            'api_token': os.environ.get('JIRA_API_TOKEN', '')
+        }
     
     def create_incident_ticket(self, incident_data):
         """

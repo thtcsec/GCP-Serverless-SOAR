@@ -5,11 +5,10 @@ Forwards incident data to SIEM systems (Splunk, Chronicle, Elastic)
 
 import json
 import os
-import boto3
 import logging
 import requests  # type: ignore
 from datetime import datetime, timezone
-from botocore.exceptions import ClientError
+
 
 # Configure logging
 logging.basicConfig(
@@ -22,29 +21,15 @@ class SIEMForwarder:
     """Advanced SIEM integration for incident data forwarding"""
     
     def __init__(self):
-        self.ssm_client = boto3.client('ssm')
         self.siem_config = self._get_siem_config()
         self.siem_type = os.environ.get('SIEM_TYPE', 'splunk').lower()
         
     def _get_siem_config(self):
-        """Retrieve SIEM configuration from AWS Systems Manager Parameter Store"""
-        try:
-            endpoint_response = self.ssm_client.get_parameter(
-                Name='/soar/siem/endpoint',
-                WithDecryption=True
-            )
-            api_key_response = self.ssm_client.get_parameter(
-                Name='/soar/siem/api_key',
-                WithDecryption=True
-            )
-            
-            return {
-                'endpoint': endpoint_response['Parameter']['Value'],
-                'api_key': api_key_response['Parameter']['Value']
-            }
-        except ClientError as e:
-            logger.error(f"Failed to retrieve SIEM configuration: {str(e)}")
-            raise
+        """Retrieve SIEM configuration from environment variables"""
+        return {
+            'endpoint': os.environ.get('SIEM_ENDPOINT', ''),
+            'api_key': os.environ.get('SIEM_API_KEY', '')
+        }
     
     def forward_incident_data(self, incident_data):
         """

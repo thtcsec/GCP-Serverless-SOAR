@@ -5,11 +5,10 @@ Sends notifications to Slack channels for incident response
 
 import json
 import os
-import boto3
 import logging
 import requests  # type: ignore
 from datetime import datetime, timezone
-from botocore.exceptions import ClientError
+
 
 # Configure logging
 logging.basicConfig(
@@ -22,20 +21,14 @@ class SlackNotifier:
     """Advanced Slack notification system for SOAR"""
     
     def __init__(self):
-        self.ssm_client = boto3.client('ssm')
         self.webhook_url = self._get_slack_webhook_url()
         
     def _get_slack_webhook_url(self):
-        """Retrieve Slack webhook URL from AWS Systems Manager Parameter Store"""
-        try:
-            response = self.ssm_client.get_parameter(
-                Name='/soar/slack/webhook_url',
-                WithDecryption=True
-            )
-            return response['Parameter']['Value']
-        except ClientError as e:
-            logger.error(f"Failed to retrieve Slack webhook URL: {str(e)}")
-            raise
+        """Retrieve Slack webhook URL from environment variables"""
+        url = os.environ.get('SLACK_WEBHOOK_URL')
+        if not url:
+            logger.warning("SLACK_WEBHOOK_URL is not set in environment")
+        return url
     
     def send_incident_alert(self, incident_data):
         """
