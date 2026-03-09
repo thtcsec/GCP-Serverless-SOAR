@@ -6,12 +6,12 @@ from datetime import datetime, timezone, timedelta, timezone
 try:
     from google.cloud import iam_admin_v1
 except Exception:
-    iam_admin_v1 = None
+    iam_admin_v1 = None  # type: ignore[assignment]
 from google.cloud import logging as cloud_logging
 try:
     from google.cloud import pubsub_v1  # type: ignore[attr-defined]
 except Exception:
-    pubsub_v1 = None
+    pubsub_v1 = None  # type: ignore[assignment]
 import functions_framework
 
 iam_client = None

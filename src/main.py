@@ -157,6 +157,14 @@ def send_slack_alert(project_id, zone, instance_name, category, severity, findin
     except Exception as e:
         logger.error(f"Failed to send Slack alert: {str(e)}")
 
+    # Kick off Jira Integration to generate an ITIL incident ticket
+    try:
+        from integrations.jira import create_jira_issue
+        action_str = "✅ Isolated (Network Tag), SA Detached, Project SSH Blocked, Snapshotted, Stopped."
+        create_jira_issue(instance_name, category, severity, action_str)
+    except Exception as e:
+        logger.error(f"Failed to invoke Jira integration: {e}")
+
 
 def isolate_instance(project_id, zone, instance_name):
     logger.info(f"Isolating {instance_name} by applying network tag: {ISOLATION_TAG}")

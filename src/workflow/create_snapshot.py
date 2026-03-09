@@ -34,7 +34,7 @@ def create_snapshot(request):
 
     try:
         instance = instances_client.get(project=project_id, zone=zone, instance=instance_name)
-        snapshots_created: list[dict] = []
+        snapshots_created = []
 
         for disk in instance.disks:
             disk_name = disk.source.split("/")[-1]
