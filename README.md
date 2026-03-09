@@ -178,7 +178,22 @@ gantt
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
-- `attack_simulation/`: Bash scripts to emulate malicious behavior and trigger the SOAR logic.
+- `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
+
+## 🥊 Attack Simulator (New!)
+
+To test the SOAR capabilities, a powerful built-in Red Team Docker container is provided.
+You do not need to export credentials manually; the container maps your local gcloud credentials automatically.
+
+```bash
+# From the root of this project:
+docker compose run --rm attacker
+```
+
+This will launch an interactive menu allowing you to:
+1. Trigger the GCE Crypto Miner
+2. Trigger Cloud Storage Data Exfiltration
+3. Trigger Service Account Compromise
 - `containers/`: Cloud Run forensic worker configuration.
 
 ## 🚀 Deployment

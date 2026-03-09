@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  attacker:
+    build:
+      context: ./attack_simulation
+      dockerfile: Dockerfile
+    container_name: gcp-soar-attacker
+    # Set the environment variable if you don't map the volume
+    # environment:
+    #   - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+    volumes:
+      # Mount the host gcloud directory to pass credentials securely to the container
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    stdin_open: true # Equivalent to -i
+    tty: true # Equivalent to -t
