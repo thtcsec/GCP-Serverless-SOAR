@@ -258,8 +258,17 @@ gcloud secrets create slack-webhook-url --replication-policy automatic
 echo "WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-file=-
 
 # Jira integration
+gcloud secrets create jira-url --replication-policy automatic
+echo "https://your-domain.atlassian.net" | gcloud secrets versions add jira-url --data-file=-
+
+gcloud secrets create jira-username --replication-policy automatic
+echo "email@example.com" | gcloud secrets versions add jira-username --data-file=-
+
 gcloud secrets create jira-api-token --replication-policy automatic
 echo "API_TOKEN" | gcloud secrets versions add jira-api-token --data-file=-
+
+gcloud secrets create jira-project-key --replication-policy automatic
+echo "SEC" | gcloud secrets versions add jira-project-key --data-file=-
 
 # SIEM integration
 gcloud secrets create siem-api-key --replication-policy automatic
