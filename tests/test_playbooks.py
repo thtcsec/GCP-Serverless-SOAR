@@ -134,6 +134,105 @@ class TestSACompromisePlaybook:
         """Test playbook rejects malformed events"""
         assert playbook.can_handle({"invalid": "data"}) is False
 
+    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
+    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
+    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
+    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
+    @patch('src.integrations.scoring.ScoringEngine')
+    @patch('src.integrations.intel.ThreatIntelService')
+    @patch('src.playbooks.sa_compromise.emit_metric')
+    @patch('src.playbooks.sa_compromise.PlaybookTimer')
+    def test_execute_auto_isolate(self, mock_timer, mock_emit, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+        """Test successful execution resulting in AUTO_ISOLATE"""
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        
+        # Mock high risk score
+        mock_scoring_inst = mock_scoring.return_value
+        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "AUTO_ISOLATE", "risk_score": 90.0}
+        
+        result = playbook.execute(valid_iam_event)
+        
+        assert result is True
+        assert mock_disable.called
+        assert mock_remove.called
+        assert mock_alert.called
+        assert mock_slack.called
+
+    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
+    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
+    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
+    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
+    @patch('src.integrations.scoring.ScoringEngine')
+    @patch('src.integrations.intel.ThreatIntelService')
+    @patch('src.playbooks.sa_compromise.PlaybookTimer')
+    def test_execute_require_approval(self, mock_timer, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+        """Test successful execution resulting in REQUIRE_APPROVAL"""
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        
+        # Mock medium risk score
+        mock_scoring_inst = mock_scoring.return_value
+        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "REQUIRE_APPROVAL", "risk_score": 50.0}
+        
+        result = playbook.execute(valid_iam_event)
+        
+        assert result is True
+        assert not mock_disable.called
+        assert not mock_remove.called
+        assert not mock_alert.called
+        assert mock_slack.called
+
+    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
+    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
+    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
+    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
+    @patch('src.integrations.scoring.ScoringEngine')
+    @patch('src.integrations.intel.ThreatIntelService')
+    @patch('src.playbooks.sa_compromise.PlaybookTimer')
+    def test_execute_ignore(self, mock_timer, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+        """Test successful execution resulting in IGNORE"""
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        
+        # Mock low risk score
+        mock_scoring_inst = mock_scoring.return_value
+        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "IGNORE", "risk_score": 10.0}
+        
+        result = playbook.execute(valid_iam_event)
+        
+        assert result is True
+        assert not mock_disable.called
+        assert not mock_remove.called
+        assert not mock_alert.called
+        assert not mock_slack.called
+
+    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
+    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
+    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
+    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
+    @patch('src.integrations.scoring.ScoringEngine')
+    @patch('src.playbooks.sa_compromise.emit_metric')
+    @patch('src.playbooks.sa_compromise.PlaybookTimer')
+    def test_execute_internal_ip(self, mock_timer, mock_emit, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+        """Test successful execution resulting from internal IP local fallback calculation"""
+        valid_iam_event["protoPayload"]["request"]["callerIp"] = "compute.google.com"
+
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        
+        # Mock medium internal risk score
+        mock_scoring_inst = mock_scoring.return_value
+        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "REQUIRE_APPROVAL", "risk_score": 60.0}
+        
+        result = playbook.execute(valid_iam_event)
+        
+        assert result is True
+        assert not mock_disable.called
+        assert not mock_remove.called
+        assert not mock_alert.called
+        assert mock_slack.called
+
 
 class TestStorageExfiltrationPlaybook:
     """Test Storage Exfiltration Playbook"""

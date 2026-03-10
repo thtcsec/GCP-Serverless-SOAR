@@ -54,25 +54,66 @@ class SACompromise:
                 logger.warning("Cannot extract SA email from resource name")
                 return False
 
-            risk_score = self._calculate_risk(payload)
-            if risk_score < 7:
-                logger.info(f"Risk score {risk_score} below threshold for {sa_email}")
-                return True  # handled but no action needed
+            caller_ip = payload.request.get("callerIp", "")
+            action = payload.method_name
 
-            logger.warning(f"SA compromise detected: {sa_email} (score={risk_score})")
-            emit_metric("findings_processed", 1.0, {"playbook": "SACompromise"})
+            intel_report = {}
+            risk_data = {"decision": "IGNORE", "risk_score": 0.0}
 
-            try:
-                with tracer.start_as_current_span("sa_compromise") as span:
-                    span.set_attribute("service_account", sa_email)
-                    span.set_attribute("risk_score", risk_score)
-                    self._disable_keys(sa_email)
-                    self._remove_critical_roles(sa_email)
-                    self._send_alert(sa_email, payload.authentication_info.principal_email, risk_score)
+            # 1. Threat Intel & Scoring
+            if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
+                try:
+                    from ..integrations.intel import ThreatIntelService
+                    from ..integrations.scoring import ScoringEngine
+                    
+                    intel_service = ThreatIntelService()
+                    scoring_engine = ScoringEngine()
+                    
+                    intel_report = intel_service.get_ip_report(caller_ip)
+                    base_risk = self._calculate_base_risk(payload, caller_ip)
+                    
+                    risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
+                except Exception as e:
+                    logger.error(f"Failed to calculate risk score: {e}")
+            else:
+                # Local fallback if IP is internal or missing
+                base_risk = self._calculate_base_risk(payload, caller_ip)
+                from ..integrations.scoring import ScoringEngine
+                scoring_engine = ScoringEngine()
+                risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
+
+            decision = str(risk_data.get("decision", "IGNORE"))
+            raw_score = risk_data.get("risk_score", 0.0)
+            score = float(str(raw_score))
+
+            # 2. Decision Routing
+            if decision == "IGNORE":
+                logger.info(f"Ignored SA Compromise for {sa_email} due to low risk score ({score}).")
                 return True
-            except Exception as exc:
-                logger.error(f"SA response failed for {sa_email}: {exc}")
-                return False
+
+            elif decision == "REQUIRE_APPROVAL":
+                logger.info(f"SA Compromise for {sa_email} requires human approval. Score: {score}")
+                self._notify_slack(sa_email, action, caller_ip, score, decision, intel_report)
+                return True
+
+            elif decision == "AUTO_ISOLATE":
+                logger.critical(f"SA Auto-Isolation triggered for {sa_email} on {action} (Score: {score})")
+                emit_metric("findings_processed", 1.0, {"playbook": "SACompromise"})
+
+                try:
+                    with tracer.start_as_current_span("sa_compromise") as span:
+                        span.set_attribute("service_account", sa_email)
+                        span.set_attribute("risk_score", score)
+                        self._disable_keys(sa_email)
+                        self._remove_critical_roles(sa_email)
+                        self._send_alert(sa_email, payload.authentication_info.principal_email, int(score))
+                        self._notify_slack(sa_email, action, caller_ip, score, decision, intel_report)
+                    return True
+                except Exception as exc:
+                    logger.error(f"SA response failed for {sa_email}: {exc}")
+                    return False
+            
+            return False
 
     # ------------------------------------------------------------------ #
 
@@ -83,17 +124,16 @@ class SACompromise:
         return None
 
     @staticmethod
-    def _calculate_risk(payload) -> int:
+    def _calculate_base_risk(payload, caller_ip: str) -> float:
         score = 0
         if any(m in payload.method_name for m in HIGH_RISK_METHODS):
             score += 5
-        caller_ip = payload.request.get("callerIp", "")
-        if not caller_ip.startswith(("compute.google", "container.google")):
+        if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
             score += 3
         hour = datetime.now(timezone.utc).hour
         if hour >= 23 or hour <= 5:
             score += 2
-        return min(score, 10)
+        return float(min(score, 10))
 
     @staticmethod
     def _disable_keys(sa_email: str) -> None:
@@ -144,3 +184,21 @@ class SACompromise:
         }
         publisher.publish(topic_path, json.dumps(alert).encode("utf-8"))
         logger.info(f"Published SA compromise alert for {sa_email}")
+
+    @staticmethod
+    def _notify_slack(sa_email: str, action: str, ip: str, score: float, decision: str, intel_report: Dict[str, Any]) -> None:
+        """Sends an alert to Slack."""
+        try:
+            from ..integrations.slack_notifier import SlackNotifier
+            notifier = SlackNotifier()
+            incident_data = {
+                "id": f"SA-{sa_email}-{action}",
+                "severity": "CRITICAL" if decision == "AUTO_ISOLATE" else "HIGH",
+                "title": f"Service Account Compromise Deteced: {action}",
+                "description": f"Suspicious Action: {action}\nService Account: {sa_email}\nSource IP: {ip}\nRisk Score: {score}",
+                "decision": decision,
+                "intel_summary": intel_report
+            }
+            notifier.send_incident_alert(incident_data)
+        except Exception as e:
+            logger.error(f"Failed to notify Slack: {str(e)}")
