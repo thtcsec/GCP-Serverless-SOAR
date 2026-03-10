@@ -1,4 +1,4 @@
-﻿# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
+# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
 
 ![GCP](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
@@ -178,8 +178,27 @@ gantt
 - **Threat intelligence** feeds (VirusTotal, AbuseIPDB)
 - **Automated Scoring Engine** for decision-based orchestration
 
+### Multi-Cloud Orchestration
+- **Unified Event Normalizer** converts SCC/AuditLog events into a standard `UnifiedIncident` schema
+- **Incident Correlator** groups related alerts by shared IOCs (IP, actor, ±5 min time window)
+- **Campaign Detection** via BFS clustering for multi-stage attack identification
+
+### AI/ML Anomaly Detection
+- **Isolation Forest** model for behavioral anomaly detection
+- **Z-Score Fallback** when ML model is not yet trained
+- **Feature Vector**: `hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`
+- **Enhanced Scoring**: anomaly boost (+15) automatically raises risk level
+
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
+  - `main.py`: Main GCE incident response playbook
+  - `storage_exfil_response.py`: Storage data exfiltration detection and response
+  - `sa_compromise_response.py`: Service Account compromise detection and response
+  - `core/event_normalizer.py`: Unified event normalization (→ `UnifiedIncident`)
+  - `core/correlator.py`: Cross-cloud incident correlation engine
+  - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
+  - `integrations/scoring.py`: Risk scoring engine with anomaly boost
+  - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
 
