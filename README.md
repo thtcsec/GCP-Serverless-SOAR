@@ -152,6 +152,11 @@ gantt
 
 ## 🛡️ Advanced Features
 
+### 🧠 AI/ML Threat Intelligence (Phase 9)
+- **Threat Classifier**: ML-driven engine that predicts incident severity, maps to MITRE ATT&CK TTPs, and auto-generates response playbooks based on historical attack patterns.
+- **Behavioral Analytics**: Establishes behavioral baselines for Service Accounts to detect anomalies in IP location, temporal patterns (off-hours), and API action frequencies.
+- **Attack Forecaster**: Predictive security module that analyzes historical incidents to forecast probable future attack vectors and generates proactive security recommendations.
+
 ### Workflow Engine (Cloud Workflows)
 - **Human approval** workflows for critical actions
 - **Multi-step incident response** with retry logic
