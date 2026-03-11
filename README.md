@@ -213,6 +213,11 @@ gantt
 - **90-day rotation policy** with configurable thresholds
 - **Rotation report** for compliance dashboards
 
+### GenAI Incident Summarization (Vertex AI)
+- **AI-powered alert summaries** via Gemini (gemini-3-flash-preview) injected into Slack notifications
+- **Automatic fallback** to rule-based templates when Vertex AI is unavailable
+- **Actionable context**: what happened, affected resource, severity, recommended next step
+
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
   - `main.py`: Main GCE incident response playbook
@@ -230,7 +235,7 @@ gantt
   - `modules/monitoring/`: Cloud Monitoring Dashboard and Alert Policies
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
 
-## 🥊 Attack Simulator (New!)
+## 🥊 Attack Simulator
 
 To test the SOAR capabilities, a powerful built-in Red Team Docker container is provided.
 You do not need to export credentials manually; the container maps your local gcloud credentials automatically.
