@@ -248,10 +248,9 @@ This will launch an interactive menu allowing you to:
 
 ## 🚀 Deployment
 
-### Prerequisites
-- [Terraform](https://www.terraform.io/downloads.html) installed locally.
-- Google Cloud SDK (`gcloud`) installed and configured.
-- A GCP Project with billing enabled.
+We provide a fully automated deployment script for the entire platform.
+
+**👉 Please see the comprehensive [Deployment Guide (Deployment.md)](./Deployment.md) for full pre-requisites, step-by-step instructions, and troubleshooting.**
 
 ### Environment Structure
 ```
@@ -268,13 +267,16 @@ terraform/
 └── existing/                  # Original basic setup
 ```
 
-### Quick Deploy
+### TL;DR Quick Deploy
 ```bash
-# Deploy SOAR platform
-cd gcp-serverless-soar
-./scripts/deploy.sh prod
+# 1. Clone the repository
+git clone https://github.com/thtcsec/GCP-Serverless-SOAR.git
+cd GCP-Serverless-SOAR
 
-# Configure integrations
+# 2. Run the deployment script (deploys Terraform, builds Cloud Run containers, sets up Secrets)
+./scripts/deploy.sh prod deploy
+
+# 3. Configure Integrations (Slack/Jira)
 gcloud secrets create slack-webhook-url --replication-policy automatic
 echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-file=-
 ```
