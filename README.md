@@ -189,6 +189,18 @@ gantt
 - **Feature Vector**: `hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`
 - **Enhanced Scoring**: anomaly boost (+15) automatically raises risk level
 
+### Process-Level Containment (Compute Engine)
+- **Kill malicious processes** directly on GCE via metadata scripts
+- **Quarantine suspicious files** to `/var/quarantine`
+- **Suspicious process detection** (xmrig, cryptominer, kinsing, etc.)
+- **Containment hierarchy**: Function > Process > Permissions > Network
+
+### Audit Trail & Compliance
+- **Immutable audit logging** for all SOAR actions (containment, scoring, approvals)
+- **Cloud Logging** integration for real-time audit streaming
+- **GCS archival** for long-term audit retention and compliance
+- **Filterable audit queries** by resource, action type, or time range
+
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
   - `main.py`: Main GCE incident response playbook
@@ -199,6 +211,8 @@ gantt
   - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
   - `integrations/scoring.py`: Risk scoring engine with anomaly boost
   - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
+  - `core/process_containment.py`: Process-level containment via Compute Engine metadata
+  - `core/audit_logger.py`: Structured audit trail with Cloud Logging/GCS archival
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
 
