@@ -201,6 +201,18 @@ gantt
 - **GCS archival** for long-term audit retention and compliance
 - **Filterable audit queries** by resource, action type, or time range
 
+### Monitoring & Observability (Terraform)
+- **Cloud Monitoring Dashboard** with function execution volume, error rate, MTTR
+- **Alerting Policies** for Cloud Function errors and Pub/Sub backlogs
+- **Cloud Workflows execution tracking** (success/fail)
+- **Cloud Run forensic worker metrics**
+
+### Secret Rotation
+- **Automated key age detection** for all SOAR API keys
+- **Secret Manager version rotation** with audit trail
+- **90-day rotation policy** with configurable thresholds
+- **Rotation report** for compliance dashboards
+
 ## 🗂️ Project Structure
 - `src/`: Python code for the Cloud Functions and Cloud Run responders.
   - `main.py`: Main GCE incident response playbook
@@ -213,7 +225,9 @@ gantt
   - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
   - `core/process_containment.py`: Process-level containment via Compute Engine metadata
   - `core/audit_logger.py`: Structured audit trail with Cloud Logging/GCS archival
+  - `core/secret_rotation.py`: API key rotation manager (90-day policy)
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
+  - `modules/monitoring/`: Cloud Monitoring Dashboard and Alert Policies
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
 
 ## 🥊 Attack Simulator (New!)
