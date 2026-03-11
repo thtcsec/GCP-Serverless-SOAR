@@ -1,32 +1,51 @@
 # 🧠 Internal Architecture: GCP Serverless SOAR
 
-An advanced **Security Orchestration** framework using multi-source signal enrichment for automated incident response.
+An advanced **Security Orchestration** framework with multi-source intelligence, AI/ML anomaly detection, and granular containment strategy.
 
-## 1. Core Pillars
+## 1. Core Components
 
-*   **Ingestion (SCC & Cloud Audit Logs):** Real-time monitoring of Service Account (SA) misuse and Storage bucket exfiltration patterns.
-*   **Enrichment Engine:**
-    *   **VirusTotal Integration:** Cross-references source IPs against global threat databases (~70 engines).
-    *   **AbuseIPDB Integration:** Filters out scanners and known brute-force bots based on community-sourced reputation scores.
-*   **Orchestration (Scoring Engine):**
-    *   Translates raw signals into actionable **Risk Scores**.
-    *   Automated decision logic: `AUTO_ISOLATE` for critical threats, `REQUIRE_APPROVAL` for suspicious telemetry.
-*   **Execution (Cloud Functions):** Event-triggered responders that execute surgical remediation playbooks.
+*   **Detection Layer (SCC, Cloud Audit Logs, Event Threat Detection, VPC Flow Logs):** Real-time monitoring of Service Account misuse, Storage bucket exfiltration, and network anomalies.
+*   **Intelligence & Scoring Layer:**
+    *   **VirusTotal:** Cross-references source IPs against global threat databases (~70 engines).
+    *   **AbuseIPDB:** Filters out scanners and known brute-force bots based on community-sourced reputation.
+    *   **ML Anomaly Detection (Isolation Forest):** Behavioral analysis using feature vectors (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) with Z-Score fallback.
+    *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15). Outputs: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
+*   **Workflow Orchestration:**
+    *   **Event Routing:** Eventarc → Pub/Sub Topic for event-driven delivery.
+    *   **Workflow Engine:** Cloud Workflows → Cloud Functions (Remediation Worker) + Cloud Run (Forensic Analyst).
+    *   **Human Approval:** Slack/Jira integration for human-in-the-loop decisions.
+    *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
+    *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
+*   **Containment Hierarchy (Function > Process > Permissions > Network):**
+    *   **Process-Level:** Kill malicious processes and quarantine files via Compute Engine metadata scripts.
+    *   **Permissions-Level:** Revoke SA keys, disable Service Account, remove IAM bindings.
+    *   **Network-Level:** Block egress traffic via Firewall rules or network tags (last resort).
 
-## 2. Automated Remediation Flow
+## 2. Response Flow
 
-1.  **Signal:** SCC detects a suspicious Service Account key creation or high-volume data download from Cloud Storage.
-2.  **Analysis:** The system enriches the finding with external Threat Intel. If the IP has a high **Abuse Confidence Score**, it triggers isolation.
-3.  **Action (Surgical Response):**
-    *   **Identity Lockdown:** Disables SA keys and removes critical IAM roles (Project Editor/Owner).
-    *   **Network Isolation:** Blocks egress traffic via Cloud Armor or dynamic Firewall tags.
-    *   **Bucket Protection:** Enables S3/Storage Versioning and Object Lock to prevent data tampering.
-    *   **Evidence:** Captures persistent disk snapshots for IR teams.
-4.  **Governance:** Publishes full incident context to Pub/Sub and creates a **Jira** forensic record.
+1.  **Enrichment:** On receiving a finding, the system queries multiple Threat Intel sources and runs ML anomaly detection.
+2.  **Scoring:** The Scoring Engine evaluates all signals and calculates the risk score with anomaly boost.
+    *   Low risk → **Logged & Ignored**.
+    *   Medium risk → **Alert Sent (Awaiting Human Approval)**.
+    *   High risk → **Automated Containment** (process kill → credential revocation → network isolation).
+3.  **Remediation:**
+    *   **Process Containment:** Kill suspicious processes (xmrig, cryptominer) via metadata script.
+    *   **Identity Lockdown:** SA keys disabled, IAM roles stripped.
+    *   **Network Isolation:** Firewall rules applied.
+    *   **Evidence Collection:** Persistent disk snapshots captured for IR teams.
+4.  **Audit & Compliance:** All actions logged to immutable audit trail (Cloud Logging → GCS archival). Full context published to Jira for governance.
 
-## 3. Why This Is Powerful
-*   **Total Automation:** If a hack happens at 3:00 AM, the system locks the hacker out while you sleep.
-*   **Scaling:** Whether 1 or 1,000 servers are attacked, GCP spawns 1,000 "Robots" to handle them all simultaneously.
+## 3. Observability & Security Hardening
+
+*   **Cloud Monitoring Dashboard (Terraform):** Function execution volume, error rate, MTTR, Pub/Sub depth, Cloud Workflows status, Cloud Run metrics.
+*   **Alerting Policies:** Auto-alert on Cloud Function errors and Pub/Sub backlogs.
+*   **Secret Rotation:** 90-day rotation policy for all API keys via Secret Manager.
+*   **Audit Logger:** Structured audit trail for every SOAR action with Cloud Logging + GCS archival.
+
+## 4. Why Serverless?
+*   **Cost:** You don't pay for idle. The platform only costs ~$5-15/month for low/moderate traffic.
+*   **Speed:** It reacts in milliseconds, far faster than any human operator.
+*   **Scale:** Whether 1 or 1,000 incidents, GCP auto-scales Cloud Functions and Cloud Run to handle them all simultaneously.
 
 ---
-**Bottom Line:** You have built a "Self-Healing" security perimeter. In the world of Cloud Computing, this is the gold standard of defense! 🛡️
+**Bottom Line:** A "Self-Healing" security perimeter with multi-layer intelligence, ML anomaly detection, and granular containment — from killing a single process to full network lockdown. 🛡️
