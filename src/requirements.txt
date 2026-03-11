@@ -1,3 +1,6 @@
+# ============================
+# GCP SOAR - Runtime Dependencies
+# ============================
 google-cloud-compute==1.15.0
 google-cloud-securitycenter==1.25.0
 google-cloud-logging==3.8.0
@@ -13,6 +16,3 @@ opentelemetry-exporter-gcp-trace==1.9.0
 requests==2.31.0
 functions-framework==3.4.0
 pydantic==2.5.3
-
-# Dev & Testing Dependencies
-pytest==8.0.0

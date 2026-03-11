@@ -1,0 +1,15 @@
+# ============================
+# GCP SOAR - All Dependencies (Runtime + Dev/CI)
+# ============================
+
+# Runtime dependencies
+-r src/requirements.txt
+
+# Testing
+pytest==8.0.0
+pytest-cov==4.1.0
+
+# Linting & Security
+flake8==7.0.0
+bandit==1.7.6
+mypy==1.8.0

@@ -22,7 +22,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov pydantic requests google-cloud-compute google-cloud-securitycenter google-cloud-logging google-cloud-resource-manager google-cloud-iam google-cloud-pubsub google-cloud-storage google-cloud-monitoring
+        pip install -r requirements.txt
 
     - name: Run tests before release
       env:
