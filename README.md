@@ -297,6 +297,20 @@ gcloud secrets create siem-api-key --replication-policy automatic
 echo "API_KEY" | gcloud secrets versions add siem-api-key --data-file=-
 ```
 
+## 💰 Cost Estimation
+
+Since this platform is built entirely on native Serverless architecture, the cost is heavily optimized and strictly **pay-as-you-go**. There is virtually zero idle cost.
+
+### Estimated Monthly Cost (Low/Moderate Traffic): `~$5 - $15 / month`
+- **GCP Security Command Center:** Premium tier is usually billed as a % of your total GCP spend. However, Standard tier is free and detects basic misconfigurations. Threat Detection relies on SCC Premium or Audit Logs.
+- **Cloud Workflows:** 5,000 free internal steps per month. Since SOAR workflows only trigger on critical findings, you will likely stay within the free tier (**$0**).
+- **Cloud Functions:** 2 Million free invocations/month. Usage for incident routing is negligible (**$0**).
+- **Pub/Sub / Eventarc:** 10 GB free messaging per month. Event volume is minimal (**$0**).
+- **Cloud Run (Forensics Workers):** Billed per 100 milliseconds of compute. Since forensic containers only spin up during an incident and run for ~5-15 mins, cost is extremely low (**< $2/month**).
+- **Threat Intel (VirusTotal/AbuseIPDB):** Free Community API keys limit queries to ~500-1000/day. More than enough for SOAR alerts (**$0**).
+
+*Note: Enabling Organization-level audit logs or operating in a high-attack-volume environment will scale logging and storage costs up proportionally.*
+
 ## 📄 License
 
 This project is licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
