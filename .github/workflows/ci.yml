@@ -41,3 +41,16 @@ jobs:
         PYTHONPATH: .
       run: |
         pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
+
+  iac_scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Checkov IaC Security Scan
+      uses: bridgecrewio/checkov-action@v12
+      with:
+        directory: terraform/
+        framework: terraform
+        soft_fail: true
+        output_format: cli
