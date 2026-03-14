@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -16,21 +18,9 @@ from google.cloud import compute_v1, storage  # type: ignore[attr-defined]
 
 logger = logging.getLogger("gcp-soar.cross_project")
 
-# Map of environment → target SA for impersonation
-ACCOUNT_MAP: Dict[str, Dict[str, str]] = {
-    "dev": {
-        "project_id": "",           # Set via env or config
-        "target_sa": "",            # e.g. soar-responder@dev-project.iam.gserviceaccount.com
-    },
-    "staging": {
-        "project_id": "",
-        "target_sa": "",
-    },
-    "prod": {
-        "project_id": "",
-        "target_sa": "",
-    },
-}
+DEFAULT_ENVIRONMENTS = ("dev", "staging", "prod")
+PROJECT_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$")
+SERVICE_ACCOUNT_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
 
 SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
@@ -41,10 +31,68 @@ SCOPES = [
 class CrossProjectResponder:
     """Execute SOAR actions in a remote GCP project via SA impersonation."""
 
-    def __init__(self, environment: str = "dev") -> None:
+    def __init__(self, environment: str = "dev", strict: Optional[bool] = None) -> None:
         self.environment = environment
-        self.account = ACCOUNT_MAP.get(environment, {})
+        self.strict = strict if strict is not None else os.environ.get("CROSS_PROJECT_STRICT_CONFIG", "false").lower() == "true"
+        self.account_map = self._load_account_map()
+        self._validate_account_map()
+        self.account = self.account_map.get(environment, {})
+        self._validate_current_environment()
         self._credentials = None
+
+    def _load_account_map(self) -> Dict[str, Dict[str, str]]:
+        raw = os.environ.get("CROSS_PROJECT_ACCOUNT_MAP", "").strip()
+        account_map: Dict[str, Dict[str, str]] = {env: {"project_id": "", "target_sa": ""} for env in DEFAULT_ENVIRONMENTS}
+        if raw:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, dict):
+                raise ValueError("CROSS_PROJECT_ACCOUNT_MAP must be a JSON object")
+            for env, cfg in parsed.items():
+                if isinstance(cfg, dict):
+                    account_map[env] = {
+                        "project_id": str(cfg.get("project_id", "")).strip(),
+                        "target_sa": str(cfg.get("target_sa", "")).strip(),
+                    }
+        for env in DEFAULT_ENVIRONMENTS:
+            env_prefix = env.upper()
+            project_id = os.environ.get(f"{env_prefix}_TARGET_PROJECT_ID", "").strip()
+            target_sa = os.environ.get(f"{env_prefix}_TARGET_SERVICE_ACCOUNT", "").strip()
+            if project_id:
+                account_map.setdefault(env, {})["project_id"] = project_id
+            if target_sa:
+                account_map.setdefault(env, {})["target_sa"] = target_sa
+        return account_map
+
+    def _validate_account_map(self) -> None:
+        issues: List[str] = []
+        for env, cfg in self.account_map.items():
+            project_id = str(cfg.get("project_id", "")).strip()
+            target_sa = str(cfg.get("target_sa", "")).strip()
+            if not project_id and not target_sa:
+                continue
+            if not project_id:
+                issues.append(f"{env}: missing project_id")
+            elif not PROJECT_ID_PATTERN.match(project_id):
+                issues.append(f"{env}: invalid project_id format")
+            if not target_sa:
+                issues.append(f"{env}: missing target_sa")
+            elif not SERVICE_ACCOUNT_PATTERN.match(target_sa):
+                issues.append(f"{env}: invalid target_sa format")
+        if issues:
+            message = "Cross-project account mapping validation failed: " + "; ".join(issues)
+            if self.strict:
+                raise ValueError(message)
+            logger.warning(message)
+
+    def _validate_current_environment(self) -> None:
+        project_id = str(self.account.get("project_id", "")).strip()
+        target_sa = str(self.account.get("target_sa", "")).strip()
+        if project_id and target_sa:
+            return
+        message = f"Environment '{self.environment}' is not fully configured for cross-project response"
+        if self.strict:
+            raise ValueError(message)
+        logger.warning(message)
 
     # ------------------------------------------------------------------ #
     # Credential management
