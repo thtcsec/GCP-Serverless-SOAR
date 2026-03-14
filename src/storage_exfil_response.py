@@ -2,7 +2,7 @@ import base64
 import json
 import logging
 import os
-from datetime import datetime, timezone, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 import src.integrations as integrations
 try:
     from google.cloud import storage  # type: ignore[attr-defined]
