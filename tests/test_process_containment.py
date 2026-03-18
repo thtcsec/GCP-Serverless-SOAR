@@ -1,6 +1,9 @@
 """Tests for GCP Process Containment via Compute Engine."""
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.core.process_containment import ProcessContainment
 
 
@@ -25,9 +28,7 @@ class TestProcessContainment:
     def _setup_compute_success(self, compute_client, output):
         instances = compute_client.instances.return_value
         instances.setMetadata.return_value.execute.return_value = {}
-        instances.getSerialPortOutput.return_value.execute.return_value = {
-            "contents": output
-        }
+        instances.getSerialPortOutput.return_value.execute.return_value = {"contents": output}
 
     def test_list_processes(self, containment, compute_client, mock_ps_output):
         self._setup_compute_success(compute_client, mock_ps_output)

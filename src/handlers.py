@@ -7,10 +7,10 @@ Mirrors the AWS handlers.py pattern.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
-from .playbooks.registry import PlaybookRegistry
 from .playbooks.gce_containment import GCEContainment
+from .playbooks.registry import PlaybookRegistry
 from .playbooks.sa_compromise import SACompromise
 from .playbooks.storage_exfiltration import StorageExfiltration
 
@@ -30,7 +30,8 @@ registry.register(StorageExfiltration())
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def handle_event(event_data: Dict[str, Any]) -> Dict[str, Any]:
+
+def handle_event(event_data: dict[str, Any]) -> dict[str, Any]:
     """
     Dispatch *event_data* to the first playbook that can handle it.
 

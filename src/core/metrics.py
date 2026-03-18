@@ -4,8 +4,7 @@ Custom metrics emission and distributed tracing for SOAR observability.
 """
 
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from ..core.config import config
 from ..core.logger import logger
@@ -14,13 +13,12 @@ from ..core.logger import logger
 def emit_metric(
     metric_type: str,
     value: float = 1.0,
-    labels: Optional[dict] = None,
+    labels: dict | None = None,
 ) -> None:
     """Write a custom monitoring metric to Cloud Monitoring."""
     try:
         from google.cloud import monitoring_v3  # type: ignore[attr-defined]
-        from google.api import metric_pb2
-        from google.protobuf import timestamp_pb2  # type: ignore[import-untyped]
+
         from ..clients.gcp import get_monitoring_client
 
         client = get_monitoring_client()
@@ -35,7 +33,7 @@ def emit_metric(
             for k, v in labels.items():
                 series.metric.labels[k] = v
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         seconds = int(now.timestamp())
         nanos = int((now.timestamp() - seconds) * 1e9)
 
@@ -45,9 +43,7 @@ def emit_metric(
         point.interval.end_time.nanos = nanos
         series.points = [point]
 
-        client.create_time_series(
-            request={"name": project_name, "time_series": [series]}
-        )
+        client.create_time_series(request={"name": project_name, "time_series": [series]})
     except Exception as e:
         logger.warning(f"Failed to emit metric {metric_type}: {e}")
 
@@ -58,6 +54,7 @@ def get_tracer(name: str = "gcp-soar"):
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
         from ..clients.gcp import get_trace_exporter
 
         provider = trace.get_tracer_provider()
@@ -71,6 +68,7 @@ def get_tracer(name: str = "gcp-soar"):
     except Exception as e:
         logger.warning(f"Failed to initialise Cloud Trace: {e}")
         from opentelemetry import trace
+
         return trace.get_tracer(name)
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import functions_framework
 from google.cloud import compute_v1
@@ -66,7 +66,7 @@ def terminate_instance(request):
             "detected_at": body.get("event_time", ""),
             "isolated_at": body.get("isolation_timestamp", ""),
             "snapshot_at": body.get("snapshot_timestamp", ""),
-            "terminated_at": datetime.now(timezone.utc).isoformat(),
+            "terminated_at": datetime.now(UTC).isoformat(),
         },
     }
 

@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
-from ..clients.gcp import get_storage_client, get_publisher
+from ..clients.gcp import get_publisher, get_storage_client
 from ..core.config import config
-from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
+from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
 from ..models.events import StorageAuditEvent
 
 logger = logging.getLogger("gcp-soar.playbook.storage")
@@ -22,14 +22,14 @@ tracer = get_tracer("gcp-soar.playbook.storage")
 class StorageExfiltration:
     """Detect anomalous storage reads and lock down the bucket."""
 
-    def can_handle(self, event_data: Dict[str, Any]) -> bool:
+    def can_handle(self, event_data: dict[str, Any]) -> bool:
         try:
             evt = StorageAuditEvent(**event_data)
             return evt.is_read_operation
         except Exception:
             return False
 
-    def execute(self, event_data: Dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool:
         with PlaybookTimer("StorageExfiltration"):
             evt = StorageAuditEvent(**event_data)
             payload = evt.proto_payload
@@ -72,8 +72,8 @@ class StorageExfiltration:
             return resource_name.split("projects/_/buckets/")[1].split("/")[0]
         return None
 
-    def _analyse_patterns(self, principal: str, bucket_name: str) -> Dict[str, Any]:
-        analysis: Dict[str, Any] = {
+    def _analyse_patterns(self, principal: str, bucket_name: str) -> dict[str, Any]:
+        analysis: dict[str, Any] = {
             "is_exfiltration": False,
             "risk_score": 0,
             "access_count": 0,
@@ -83,8 +83,8 @@ class StorageExfiltration:
         try:
             logs = self._get_recent_logs(principal, bucket_name)
             analysis["access_count"] = len(logs)
-            analysis["total_bytes"] = sum(l.get("size", 1_048_576) for l in logs)
-            analysis["unique_ips"] = {l.get("callerIp", "") for l in logs}
+            analysis["total_bytes"] = sum(entry.get("size", 1_048_576) for entry in logs)
+            analysis["unique_ips"] = {entry.get("callerIp", "") for entry in logs}
 
             score = 0
             if analysis["total_bytes"] > config.exfiltration_threshold:
@@ -93,7 +93,7 @@ class StorageExfiltration:
                 score += 3
             if len(analysis["unique_ips"]) > 3:
                 score += 2
-            hour = datetime.now(timezone.utc).hour
+            hour = datetime.now(UTC).hour
             if hour >= 23 or hour <= 5:
                 score += 2
 
@@ -106,7 +106,7 @@ class StorageExfiltration:
         return analysis
 
     @staticmethod
-    def _get_recent_logs(principal: str, bucket_name: str, hours: int = 24) -> List[Dict]:
+    def _get_recent_logs(principal: str, bucket_name: str, hours: int = 24) -> list[dict]:
         """Placeholder — in production this queries Cloud Logging."""
         return []
 
@@ -146,7 +146,7 @@ class StorageExfiltration:
             logger.info(f"Enabled uniform bucket-level access on {bucket_name}")
 
     @staticmethod
-    def _create_forensic_copy(bucket_name: str, principal: str, analysis: Dict) -> None:
+    def _create_forensic_copy(bucket_name: str, principal: str, analysis: dict) -> None:
         if not config.forensic_bucket:
             logger.warning("FORENSIC_BUCKET not configured — skipping forensic copy")
             return
@@ -155,16 +155,18 @@ class StorageExfiltration:
             "bucket_name": bucket_name,
             "principal": principal,
             "analysis": analysis,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
-        blob = get_storage_client().bucket(config.forensic_bucket).blob(
-            f"storage-exfil/{bucket_name}/{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
+        blob = (
+            get_storage_client()
+            .bucket(config.forensic_bucket)
+            .blob(f"storage-exfil/{bucket_name}/{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}.json")
         )
         blob.upload_from_string(json.dumps(forensic_data), content_type="application/json")
         logger.info(f"Forensic snapshot saved to {config.forensic_bucket}")
 
     @staticmethod
-    def _send_alert(bucket_name: str, principal: str, caller_ip: str, analysis: Dict) -> None:
+    def _send_alert(bucket_name: str, principal: str, caller_ip: str, analysis: dict) -> None:
         if not config.alert_topic:
             return
         publisher = get_publisher()
@@ -176,8 +178,13 @@ class StorageExfiltration:
             "caller_ip": caller_ip,
             "risk_score": analysis["risk_score"],
             "total_bytes": analysis["total_bytes"],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "actions_taken": ["user_blocked", "versioning_enabled", "retention_set", "forensic_copy_created"],
+            "timestamp": datetime.now(UTC).isoformat(),
+            "actions_taken": [
+                "user_blocked",
+                "versioning_enabled",
+                "retention_set",
+                "forensic_copy_created",
+            ],
         }
         publisher.publish(topic_path, json.dumps(alert).encode("utf-8"))
         logger.info(f"Published storage exfiltration alert for {bucket_name}")

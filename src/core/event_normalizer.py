@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,7 @@ logger = logging.getLogger("gcp-soar.normalizer")
 # ---------------------------------------------------------------------------
 # Unified Incident Schema
 # ---------------------------------------------------------------------------
+
 
 class UnifiedIncident(BaseModel):
     """Platform-agnostic incident representation."""
@@ -34,15 +35,16 @@ class UnifiedIncident(BaseModel):
     resource_type: str = ""
     risk_score: float = 0.0
     decision: str = "IGNORE"
-    intel_summary: Dict[str, Any] = Field(default_factory=dict)
-    tags: List[str] = Field(default_factory=list)
+    intel_summary: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
     raw_event_type: str = ""
-    correlation_keys: List[str] = Field(default_factory=list)
+    correlation_keys: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
 # Normalizer
 # ---------------------------------------------------------------------------
+
 
 class EventNormalizer:
     """Normalize native GCP security events into UnifiedIncident objects."""
@@ -53,7 +55,7 @@ class EventNormalizer:
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     @classmethod
-    def from_scc_finding(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_scc_finding(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize a Security Command Center finding into a UnifiedIncident."""
         resource_name = event_data.get("resourceName", "")
         severity = event_data.get("severity", "MEDIUM")
@@ -72,7 +74,7 @@ class EventNormalizer:
 
         source_ip = source_props.get("sourceIp", "")
         actor = source_props.get("principalEmail", "")
-        ts = event_data.get("eventTime", datetime.now(timezone.utc).isoformat())
+        ts = event_data.get("eventTime", datetime.now(UTC).isoformat())
         incident_id = cls._generate_id("scc", resource_name, ts)
 
         correlation_keys = [k for k in [source_ip, actor, resource_name] if k]
@@ -93,7 +95,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def from_iam_audit(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_iam_audit(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize an IAM Audit Log event into a UnifiedIncident."""
         proto = event_data.get("protoPayload", {})
         auth_info = proto.get("authenticationInfo", {})
@@ -103,7 +105,7 @@ class EventNormalizer:
         source_ip = request.get("callerIp", "")
         action = proto.get("methodName", "")
         resource_name = proto.get("resourceName", "")
-        ts = event_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+        ts = event_data.get("timestamp", datetime.now(UTC).isoformat())
 
         incident_id = cls._generate_id("iam_audit", resource_name, ts)
         correlation_keys = [k for k in [source_ip, actor, resource_name] if k]
@@ -124,7 +126,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def from_storage_audit(cls, event_data: Dict[str, Any]) -> UnifiedIncident:
+    def from_storage_audit(cls, event_data: dict[str, Any]) -> UnifiedIncident:
         """Normalize a Storage Audit Log event into a UnifiedIncident."""
         proto = event_data.get("protoPayload", {})
         auth_info = proto.get("authenticationInfo", {})
@@ -132,7 +134,7 @@ class EventNormalizer:
         actor = auth_info.get("principalEmail", "unknown")
         action = proto.get("methodName", "")
         resource_name = proto.get("resourceName", "")
-        ts = event_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+        ts = event_data.get("timestamp", datetime.now(UTC).isoformat())
 
         # Extract bucket name from resource
         bucket = ""
@@ -160,7 +162,7 @@ class EventNormalizer:
         )
 
     @classmethod
-    def normalize(cls, event_data: Dict[str, Any]) -> Optional[UnifiedIncident]:
+    def normalize(cls, event_data: dict[str, Any]) -> UnifiedIncident | None:
         """Auto-detect event type and normalize accordingly."""
         # SCC Finding detection
         if "category" in event_data and "resourceName" in event_data:

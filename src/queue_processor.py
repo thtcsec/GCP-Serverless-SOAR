@@ -10,10 +10,9 @@ import base64
 import json
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 import functions_framework
-from google.cloud import workflows_v1
 from google.cloud.workflows import executions_v1
 
 logger = logging.getLogger("gcp-soar.queue_processor")
@@ -25,7 +24,7 @@ PROJECT_ID = os.environ.get("PROJECT_ID", "")
 REGION = os.environ.get("GCP_REGION", "us-central1")
 
 # Workflow routing map — maps service names to workflow IDs
-WORKFLOW_MAP: Dict[str, str] = {
+WORKFLOW_MAP: dict[str, str] = {
     "securitycenter.googleapis.com": os.environ.get("GUARDDUTY_WORKFLOW", "soar-incident-response"),
     "iam.googleapis.com": os.environ.get("IAM_WORKFLOW", "soar-sa-response"),
     "storage.googleapis.com": os.environ.get("STORAGE_WORKFLOW", "soar-storage-response"),
@@ -60,7 +59,7 @@ def queue_processor(cloud_event):
         _send_to_dlq(message)
 
 
-def _detect_source(message: Dict[str, Any]) -> str:
+def _detect_source(message: dict[str, Any]) -> str:
     """Infer the event source from message contents."""
     if "finding" in message or "category" in message:
         return "securitycenter.googleapis.com"
@@ -68,7 +67,7 @@ def _detect_source(message: Dict[str, Any]) -> str:
     return proto.get("serviceName", "unknown")
 
 
-def _start_workflow(workflow_id: str, payload: Dict[str, Any]):
+def _start_workflow(workflow_id: str, payload: dict[str, Any]):
     """Execute a Cloud Workflow with the given payload."""
     client = executions_v1.ExecutionsClient()
     parent = f"projects/{PROJECT_ID}/locations/{REGION}/workflows/{workflow_id}"
@@ -77,7 +76,7 @@ def _start_workflow(workflow_id: str, payload: Dict[str, Any]):
     return client.create_execution(parent=parent, execution=execution)
 
 
-def _send_to_dlq(message: Dict[str, Any]) -> None:
+def _send_to_dlq(message: dict[str, Any]) -> None:
     """Forward a failed message to the Dead Letter Topic."""
     if not DLQ_TOPIC or not PROJECT_ID:
         logger.error("DLQ_TOPIC or PROJECT_ID not set — dropping message")

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import functions_framework
 from google.cloud import compute_v1
@@ -46,7 +46,7 @@ def isolate_instance(request):
             "isolation_status": "success",
             "original_tags": original_tags,
             "applied_tag": ISOLATION_TAG,
-            "isolation_timestamp": datetime.now(timezone.utc).isoformat(),
+            "isolation_timestamp": datetime.now(UTC).isoformat(),
         }
         logger.info(f"Isolated {instance_name}")
         return json.dumps(result), 200, {"Content-Type": "application/json"}

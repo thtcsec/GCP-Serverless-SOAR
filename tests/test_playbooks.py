@@ -1,12 +1,14 @@
 """
 Comprehensive tests for GCP SOAR playbooks
 """
+
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, call
+
 from src.playbooks.gce_containment import GCEContainment
 from src.playbooks.sa_compromise import SACompromise
 from src.playbooks.storage_exfiltration import StorageExfiltration
-from src.models.events import SCCFinding, IAMAuditEvent, StorageAuditEvent
 
 
 class TestGCEContainmentPlaybook:
@@ -30,8 +32,8 @@ class TestGCEContainmentPlaybook:
             "resource": {
                 "name": "test-instance",
                 "projectDisplayName": "Test Project",
-                "type": "compute.googleapis.com/Instance"
-            }
+                "type": "compute.googleapis.com/Instance",
+            },
         }
 
     def test_can_handle_high_severity_compute(self, playbook, valid_scc_finding):
@@ -57,8 +59,8 @@ class TestGCEContainmentPlaybook:
         """Test playbook rejects malformed events"""
         assert playbook.can_handle({"invalid": "data"}) is False
 
-    @patch('src.playbooks.gce_containment.get_instances_client')
-    @patch('src.playbooks.gce_containment.get_disks_client')
+    @patch("src.playbooks.gce_containment.get_instances_client")
+    @patch("src.playbooks.gce_containment.get_disks_client")
     def test_execute_success(self, mock_get_disks, mock_get_instances, playbook, valid_scc_finding):
         """Test successful playbook execution"""
         # Set up mocks
@@ -72,7 +74,7 @@ class TestGCEContainmentPlaybook:
         mock_instance.tags.items = []
         mock_instance.disks = [MagicMock(boot=True, source="projects/test/zones/us-central1-a/disks/test-disk")]
         mock_instances.get.return_value = mock_instance
-        
+
         # Mock operations
         mock_operation = MagicMock()
         mock_operation.result.return_value = None
@@ -83,7 +85,7 @@ class TestGCEContainmentPlaybook:
         mock_disks.create_snapshot.return_value = mock_operation
 
         result = playbook.execute(valid_scc_finding)
-        
+
         assert result is True
         assert mock_instances.set_tags.called
         assert mock_instances.stop.called
@@ -103,17 +105,12 @@ class TestSACompromisePlaybook:
                 "methodName": "CreateServiceAccountKey",
                 "resourceName": "projects/test-project/serviceAccounts/test-sa@test-project.iam.gserviceaccount.com",
                 "serviceName": "iam.googleapis.com",
-                "authenticationInfo": {
-                    "principalEmail": "attacker@example.com"
-                },
+                "authenticationInfo": {"principalEmail": "attacker@example.com"},
                 "status": {},
-                "request": {}
+                "request": {},
             },
             "timestamp": "2026-03-10T00:00:00Z",
-            "resource": {
-                "type": "service_account",
-                "labels": {}
-            }
+            "resource": {"type": "service_account", "labels": {}},
         }
 
     def test_can_handle_risky_iam_action(self, playbook, valid_iam_event):
@@ -134,99 +131,156 @@ class TestSACompromisePlaybook:
         """Test playbook rejects malformed events"""
         assert playbook.can_handle({"invalid": "data"}) is False
 
-    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
-    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
-    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
-    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
-    @patch('src.integrations.scoring.ScoringEngine')
-    @patch('src.integrations.intel.ThreatIntelService')
-    @patch('src.playbooks.sa_compromise.emit_metric')
-    @patch('src.playbooks.sa_compromise.PlaybookTimer')
-    def test_execute_auto_isolate(self, mock_timer, mock_emit, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+    @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
+    @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
+    @patch("src.playbooks.sa_compromise.SACompromise._remove_critical_roles")
+    @patch("src.playbooks.sa_compromise.SACompromise._disable_keys")
+    @patch("src.integrations.scoring.ScoringEngine")
+    @patch("src.integrations.intel.ThreatIntelService")
+    @patch("src.playbooks.sa_compromise.emit_metric")
+    @patch("src.playbooks.sa_compromise.PlaybookTimer")
+    def test_execute_auto_isolate(
+        self,
+        mock_timer,
+        mock_emit,
+        mock_intel,
+        mock_scoring,
+        mock_disable,
+        mock_remove,
+        mock_alert,
+        mock_slack,
+        playbook,
+        valid_iam_event,
+    ):
         """Test successful execution resulting in AUTO_ISOLATE"""
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
-        
+
         # Mock high risk score
         mock_scoring_inst = mock_scoring.return_value
-        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "AUTO_ISOLATE", "risk_score": 90.0}
-        
+        mock_scoring_inst.calculate_risk_score.return_value = {
+            "decision": "AUTO_ISOLATE",
+            "risk_score": 90.0,
+        }
+
         result = playbook.execute(valid_iam_event)
-        
+
         assert result is True
         assert mock_disable.called
         assert mock_remove.called
         assert mock_alert.called
         assert mock_slack.called
 
-    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
-    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
-    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
-    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
-    @patch('src.integrations.scoring.ScoringEngine')
-    @patch('src.integrations.intel.ThreatIntelService')
-    @patch('src.playbooks.sa_compromise.PlaybookTimer')
-    def test_execute_require_approval(self, mock_timer, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+    @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
+    @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
+    @patch("src.playbooks.sa_compromise.SACompromise._remove_critical_roles")
+    @patch("src.playbooks.sa_compromise.SACompromise._disable_keys")
+    @patch("src.integrations.scoring.ScoringEngine")
+    @patch("src.integrations.intel.ThreatIntelService")
+    @patch("src.playbooks.sa_compromise.PlaybookTimer")
+    def test_execute_require_approval(
+        self,
+        mock_timer,
+        mock_intel,
+        mock_scoring,
+        mock_disable,
+        mock_remove,
+        mock_alert,
+        mock_slack,
+        playbook,
+        valid_iam_event,
+    ):
         """Test successful execution resulting in REQUIRE_APPROVAL"""
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
-        
+
         # Mock medium risk score
         mock_scoring_inst = mock_scoring.return_value
-        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "REQUIRE_APPROVAL", "risk_score": 50.0}
-        
+        mock_scoring_inst.calculate_risk_score.return_value = {
+            "decision": "REQUIRE_APPROVAL",
+            "risk_score": 50.0,
+        }
+
         result = playbook.execute(valid_iam_event)
-        
+
         assert result is True
         assert not mock_disable.called
         assert not mock_remove.called
         assert not mock_alert.called
         assert mock_slack.called
 
-    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
-    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
-    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
-    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
-    @patch('src.integrations.scoring.ScoringEngine')
-    @patch('src.integrations.intel.ThreatIntelService')
-    @patch('src.playbooks.sa_compromise.PlaybookTimer')
-    def test_execute_ignore(self, mock_timer, mock_intel, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+    @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
+    @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
+    @patch("src.playbooks.sa_compromise.SACompromise._remove_critical_roles")
+    @patch("src.playbooks.sa_compromise.SACompromise._disable_keys")
+    @patch("src.integrations.scoring.ScoringEngine")
+    @patch("src.integrations.intel.ThreatIntelService")
+    @patch("src.playbooks.sa_compromise.PlaybookTimer")
+    def test_execute_ignore(
+        self,
+        mock_timer,
+        mock_intel,
+        mock_scoring,
+        mock_disable,
+        mock_remove,
+        mock_alert,
+        mock_slack,
+        playbook,
+        valid_iam_event,
+    ):
         """Test successful execution resulting in IGNORE"""
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
-        
+
         # Mock low risk score
         mock_scoring_inst = mock_scoring.return_value
-        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "IGNORE", "risk_score": 10.0}
-        
+        mock_scoring_inst.calculate_risk_score.return_value = {
+            "decision": "IGNORE",
+            "risk_score": 10.0,
+        }
+
         result = playbook.execute(valid_iam_event)
-        
+
         assert result is True
         assert not mock_disable.called
         assert not mock_remove.called
         assert not mock_alert.called
         assert not mock_slack.called
 
-    @patch('src.playbooks.sa_compromise.SACompromise._notify_slack')
-    @patch('src.playbooks.sa_compromise.SACompromise._send_alert')
-    @patch('src.playbooks.sa_compromise.SACompromise._remove_critical_roles')
-    @patch('src.playbooks.sa_compromise.SACompromise._disable_keys')
-    @patch('src.integrations.scoring.ScoringEngine')
-    @patch('src.playbooks.sa_compromise.emit_metric')
-    @patch('src.playbooks.sa_compromise.PlaybookTimer')
-    def test_execute_internal_ip(self, mock_timer, mock_emit, mock_scoring, mock_disable, mock_remove, mock_alert, mock_slack, playbook, valid_iam_event):
+    @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
+    @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
+    @patch("src.playbooks.sa_compromise.SACompromise._remove_critical_roles")
+    @patch("src.playbooks.sa_compromise.SACompromise._disable_keys")
+    @patch("src.integrations.scoring.ScoringEngine")
+    @patch("src.playbooks.sa_compromise.emit_metric")
+    @patch("src.playbooks.sa_compromise.PlaybookTimer")
+    def test_execute_internal_ip(
+        self,
+        mock_timer,
+        mock_emit,
+        mock_scoring,
+        mock_disable,
+        mock_remove,
+        mock_alert,
+        mock_slack,
+        playbook,
+        valid_iam_event,
+    ):
         """Test successful execution resulting from internal IP local fallback calculation"""
         valid_iam_event["protoPayload"]["request"]["callerIp"] = "compute.google.com"
 
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
-        
+
         # Mock medium internal risk score
         mock_scoring_inst = mock_scoring.return_value
-        mock_scoring_inst.calculate_risk_score.return_value = {"decision": "REQUIRE_APPROVAL", "risk_score": 60.0}
-        
+        mock_scoring_inst.calculate_risk_score.return_value = {
+            "decision": "REQUIRE_APPROVAL",
+            "risk_score": 60.0,
+        }
+
         result = playbook.execute(valid_iam_event)
-        
+
         assert result is True
         assert not mock_disable.called
         assert not mock_remove.called
@@ -248,13 +302,11 @@ class TestStorageExfiltrationPlaybook:
                 "methodName": "storage.objects.get",
                 "resourceName": "projects/_/buckets/test-bucket/objects/sensitive-data.txt",
                 "serviceName": "storage.googleapis.com",
-                "authenticationInfo": {
-                    "principalEmail": "attacker@example.com"
-                },
+                "authenticationInfo": {"principalEmail": "attacker@example.com"},
                 "status": {},
-                "request": {}
+                "request": {},
             },
-            "timestamp": "2026-03-10T00:00:00Z"
+            "timestamp": "2026-03-10T00:00:00Z",
         }
 
     def test_can_handle_get_object(self, playbook, valid_storage_event):
@@ -279,12 +331,12 @@ class TestStorageExfiltrationPlaybook:
 class TestPlaybookIntegration:
     """Integration tests for playbook registry"""
 
-    @patch('src.playbooks.gce_containment.get_instances_client')
-    @patch('src.playbooks.gce_containment.get_disks_client')
+    @patch("src.playbooks.gce_containment.get_instances_client")
+    @patch("src.playbooks.gce_containment.get_disks_client")
     def test_registry_dispatches_to_correct_playbook(self, mock_get_disks, mock_get_instances):
         """Test registry dispatches events to correct playbook"""
         from src.playbooks.registry import PlaybookRegistry
-        
+
         registry = PlaybookRegistry()
         registry.register(GCEContainment())
         registry.register(SACompromise())
@@ -292,13 +344,13 @@ class TestPlaybookIntegration:
 
         mock_instances = MagicMock()
         mock_get_instances.return_value = mock_instances
-        
+
         # Mock compute client
         mock_instance = MagicMock()
         mock_instance.tags.items = []
         mock_instance.disks = []
         mock_instances.get.return_value = mock_instance
-        
+
         mock_operation = MagicMock()
         mock_operation.result.return_value = None
         mock_instances.set_tags.return_value = mock_operation
@@ -313,16 +365,16 @@ class TestPlaybookIntegration:
             "severity": "HIGH",
             "resourceName": "//compute.googleapis.com/projects/test/zones/us-central1-a/instances/test-vm",
             "state": "ACTIVE",
-            "resource": {"name": "test", "projectDisplayName": "test", "type": "compute"}
+            "resource": {"name": "test", "projectDisplayName": "test", "type": "compute"},
         }
-        
+
         result = registry.dispatch(gce_event)
         assert result is True
 
     def test_registry_returns_none_for_unhandled_event(self):
         """Test registry returns None for unhandled events"""
         from src.playbooks.registry import PlaybookRegistry
-        
+
         registry = PlaybookRegistry()
         registry.register(GCEContainment())
 

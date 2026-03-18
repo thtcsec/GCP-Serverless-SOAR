@@ -25,16 +25,18 @@ def test_cross_project_map_from_json():
 
 def test_cross_project_strict_validation_raises():
     payload = '{"prod":{"project_id":"bad","target_sa":"invalid"}}'
-    with patch.dict(
-        os.environ,
-        {
-            "CROSS_PROJECT_ACCOUNT_MAP": payload,
-            "CROSS_PROJECT_STRICT_CONFIG": "true",
-        },
-        clear=False,
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CROSS_PROJECT_ACCOUNT_MAP": payload,
+                "CROSS_PROJECT_STRICT_CONFIG": "true",
+            },
+            clear=False,
+        ),
+        pytest.raises(ValueError),
     ):
-        with pytest.raises(ValueError):
-            CrossProjectResponder(environment="prod")
+        CrossProjectResponder(environment="prod")
 
 
 def test_cross_project_env_override():

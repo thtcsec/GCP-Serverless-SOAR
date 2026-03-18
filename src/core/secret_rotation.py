@@ -8,8 +8,8 @@ and integration secrets (Slack webhooks, Jira tokens).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("gcp-soar.secret_rotation")
 
@@ -25,26 +25,21 @@ class SecretRotationManager:
     def __init__(self, secret_client: Any = None) -> None:
         self._client = secret_client
 
-    def check_key_age(
-        self, project_id: str, secret_id: str
-    ) -> Dict[str, Any]:
+    def check_key_age(self, project_id: str, secret_id: str) -> dict[str, Any]:
         """Check the age of the latest version of a secret."""
         if not self._client:
             return {"error": "Secret Manager client not configured"}
 
         try:
             name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
-            version = self._client.access_secret_version(request={"name": name})
+            _ = self._client.access_secret_version(request={"name": name})
 
             # Get secret metadata for create time
             secret_name = f"projects/{project_id}/secrets/{secret_id}"
             secret = self._client.get_secret(request={"name": secret_name})
 
             create_time = secret.create_time
-            if create_time:
-                age_days = (datetime.now(timezone.utc) - create_time.replace(tzinfo=timezone.utc)).days
-            else:
-                age_days = -1
+            age_days = (datetime.now(UTC) - create_time.replace(tzinfo=UTC)).days if create_time else -1
 
             return {
                 "secret_id": secret_id,
@@ -56,9 +51,7 @@ class SecretRotationManager:
             logger.error(f"Failed to check key age for {secret_id}: {e}")
             return {"secret_id": secret_id, "error": str(e)}
 
-    def rotate_secret(
-        self, project_id: str, secret_id: str, new_value: str
-    ) -> bool:
+    def rotate_secret(self, project_id: str, secret_id: str, new_value: str) -> bool:
         """Add a new version of the secret (effectively rotating it)."""
         if not self._client:
             return False
@@ -77,11 +70,9 @@ class SecretRotationManager:
             logger.error(f"Failed to rotate {secret_id}: {e}")
             return False
 
-    def get_rotation_report(
-        self, project_id: str, secret_ids: List[str]
-    ) -> Dict[str, Any]:
+    def get_rotation_report(self, project_id: str, secret_ids: list[str]) -> dict[str, Any]:
         """Generate a rotation status report for all monitored secrets."""
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         needs_rotation_count = 0
 
         for sid in secret_ids:
@@ -98,7 +89,7 @@ class SecretRotationManager:
         }
 
     @staticmethod
-    def get_monitored_secrets() -> List[str]:
+    def get_monitored_secrets() -> list[str]:
         """Return the list of SOAR secret IDs that should be monitored."""
         return [
             "virustotal-api-key",

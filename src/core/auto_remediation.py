@@ -6,12 +6,12 @@ by executing commands via startup-script metadata after containment.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Known CVE → package mappings for auto-remediation
-VULNERABILITY_PATCH_MAP: Dict[str, List[str]] = {
+VULNERABILITY_PATCH_MAP: dict[str, list[str]] = {
     "openssl": ["openssl", "libssl-dev"],
     "log4j": ["liblog4j2-java"],
     "curl": ["curl", "libcurl4"],
@@ -26,12 +26,12 @@ VULNERABILITY_PATCH_MAP: Dict[str, List[str]] = {
 class AutoRemediation:
     """Automated vulnerability patching via GCE metadata scripts."""
 
-    def __init__(self, client: Optional[Any] = None,
-                 project_id: str = "", zone: str = "us-central1-a"):
+    def __init__(self, client: Any | None = None, project_id: str = "", zone: str = "us-central1-a"):
         self.project_id = project_id
         self.zone = zone
         if client is None:
             from google.cloud import compute_v1  # type: ignore
+
             self.client = compute_v1.InstancesClient()
         else:
             self.client = client
@@ -39,8 +39,8 @@ class AutoRemediation:
     def patch_instance(
         self,
         instance_name: str,
-        vulnerability_keywords: List[str],
-    ) -> Dict[str, Any]:
+        vulnerability_keywords: list[str],
+    ) -> dict[str, Any]:
         """
         Patch a GCE instance by upgrading packages related to
         detected vulnerabilities.
@@ -53,7 +53,7 @@ class AutoRemediation:
         Returns:
             Dict with patch results.
         """
-        packages_to_patch: List[str] = []
+        packages_to_patch: list[str] = []
         for keyword in vulnerability_keywords:
             kw = keyword.lower()
             for vuln_key, pkgs in VULNERABILITY_PATCH_MAP.items():
@@ -70,9 +70,7 @@ class AutoRemediation:
             }
 
         patch_script = (
-            "#!/bin/bash\n"
-            "apt-get update -qq && "
-            f"apt-get install -y --only-upgrade {' '.join(packages_to_patch)}\n"
+            f"#!/bin/bash\napt-get update -qq && apt-get install -y --only-upgrade {' '.join(packages_to_patch)}\n"
         )
 
         try:
@@ -82,9 +80,7 @@ class AutoRemediation:
                 SetMetadataInstanceRequest,
             )
 
-            metadata = Metadata(
-                items=[Items(key="startup-script", value=patch_script)]
-            )
+            metadata = Metadata(items=[Items(key="startup-script", value=patch_script)])
             request = SetMetadataInstanceRequest(
                 instance=instance_name,
                 project=self.project_id,

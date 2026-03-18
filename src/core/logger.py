@@ -6,7 +6,7 @@ JSON-formatted logger compatible with Cloud Logging / Cloud Operations Suite.
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class StructuredFormatter(logging.Formatter):
@@ -16,7 +16,7 @@ class StructuredFormatter(logging.Formatter):
         log_entry = {
             "severity": record.levelname,
             "message": record.getMessage(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "logger": record.name,
             "module": record.module,
         }

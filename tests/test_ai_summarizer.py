@@ -1,7 +1,9 @@
 """Unit tests for GCP AI Summarizer (Vertex AI)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
 import pytest
+
 from src.integrations.ai_summarizer import AISummarizer
 
 

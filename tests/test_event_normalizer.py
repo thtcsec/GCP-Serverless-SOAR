@@ -1,5 +1,7 @@
 """Tests for GCP Unified Event Normalizer."""
+
 import pytest
+
 from src.core.event_normalizer import EventNormalizer, UnifiedIncident
 
 

@@ -6,14 +6,14 @@ Handles Compute Engine VM compromise events from Security Command Center.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from google.cloud import compute_v1
 
-from ..clients.gcp import get_instances_client, get_disks_client
+from ..clients.gcp import get_disks_client, get_instances_client
 from ..core.config import config
-from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
+from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
 from ..models.events import SCCFinding
 
 logger = logging.getLogger("gcp-soar.playbook.gce")
@@ -29,7 +29,7 @@ class GCEContainment:
     # Protocol methods
     # ------------------------------------------------------------------ #
 
-    def can_handle(self, event_data: Dict[str, Any]) -> bool:
+    def can_handle(self, event_data: dict[str, Any]) -> bool:
         try:
             finding = SCCFinding(**event_data)
             return (
@@ -40,7 +40,7 @@ class GCEContainment:
         except Exception:
             return False
 
-    def execute(self, event_data: Dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool:
         with PlaybookTimer("GCEContainment"):
             finding = SCCFinding(**event_data)
             project_id, zone, instance_name = self._parse_resource(finding.resource_name)
@@ -138,7 +138,7 @@ class GCEContainment:
             return
 
         disk_name = boot_disk_url.split("/")[-1]
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         snapshot_name = f"forensic-{instance_name}-{ts}"
 
         snapshot_resource = compute_v1.Snapshot(

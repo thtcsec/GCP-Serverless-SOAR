@@ -6,12 +6,12 @@ Handles risky IAM audit-log events related to GCP service accounts.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from ..clients.gcp import get_iam_client, get_publisher, get_resource_manager_client
 from ..core.config import config
-from ..core.metrics import emit_metric, PlaybookTimer, get_tracer
+from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
 from ..models.events import IAMAuditEvent
 
 logger = logging.getLogger("gcp-soar.playbook.sa")
@@ -37,14 +37,14 @@ CRITICAL_ROLES = [
 class SACompromise:
     """Detect, disable, and alert on service-account compromise."""
 
-    def can_handle(self, event_data: Dict[str, Any]) -> bool:
+    def can_handle(self, event_data: dict[str, Any]) -> bool:
         try:
             evt = IAMAuditEvent(**event_data)
             return evt.is_risky
         except Exception:
             return False
 
-    def execute(self, event_data: Dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool:
         with PlaybookTimer("SACompromise"):
             evt = IAMAuditEvent(**event_data)
             payload = evt.proto_payload
@@ -65,13 +65,13 @@ class SACompromise:
                 try:
                     from ..integrations.intel import ThreatIntelService
                     from ..integrations.scoring import ScoringEngine
-                    
+
                     intel_service = ThreatIntelService()
                     scoring_engine = ScoringEngine()
-                    
+
                     intel_report = intel_service.get_ip_report(caller_ip)
                     base_risk = self._calculate_base_risk(payload, caller_ip)
-                    
+
                     risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
                 except Exception as e:
                     logger.error(f"Failed to calculate risk score: {e}")
@@ -79,6 +79,7 @@ class SACompromise:
                 # Local fallback if IP is internal or missing
                 base_risk = self._calculate_base_risk(payload, caller_ip)
                 from ..integrations.scoring import ScoringEngine
+
                 scoring_engine = ScoringEngine()
                 risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
 
@@ -112,7 +113,7 @@ class SACompromise:
                 except Exception as exc:
                     logger.error(f"SA response failed for {sa_email}: {exc}")
                     return False
-            
+
             return False
 
     # ------------------------------------------------------------------ #
@@ -130,7 +131,7 @@ class SACompromise:
             score += 5
         if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
             score += 3
-        hour = datetime.now(timezone.utc).hour
+        hour = datetime.now(UTC).hour
         if hour >= 23 or hour <= 5:
             score += 2
         return float(min(score, 10))
@@ -179,25 +180,33 @@ class SACompromise:
             "service_account": sa_email,
             "triggered_by": principal_email,
             "risk_score": risk_score,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "actions_taken": ["keys_disabled", "critical_roles_removed"],
         }
         publisher.publish(topic_path, json.dumps(alert).encode("utf-8"))
         logger.info(f"Published SA compromise alert for {sa_email}")
 
     @staticmethod
-    def _notify_slack(sa_email: str, action: str, ip: str, score: float, decision: str, intel_report: Dict[str, Any]) -> None:
+    def _notify_slack(
+        sa_email: str,
+        action: str,
+        ip: str,
+        score: float,
+        decision: str,
+        intel_report: dict[str, Any],
+    ) -> None:
         """Sends an alert to Slack."""
         try:
             from ..integrations.slack_notifier import SlackNotifier
+
             notifier = SlackNotifier()
             incident_data = {
                 "id": f"SA-{sa_email}-{action}",
                 "severity": "CRITICAL" if decision == "AUTO_ISOLATE" else "HIGH",
                 "title": f"Service Account Compromise Deteced: {action}",
-                "description": f"Suspicious Action: {action}\nService Account: {sa_email}\nSource IP: {ip}\nRisk Score: {score}",
+                "description": f"Suspicious Action: {action}\nService Account: {sa_email}\nSource IP: {ip}\nRisk Score: {score}",  # noqa: E501
                 "decision": decision,
-                "intel_summary": intel_report
+                "intel_summary": intel_report,
             }
             notifier.send_incident_alert(incident_data)
         except Exception as e:

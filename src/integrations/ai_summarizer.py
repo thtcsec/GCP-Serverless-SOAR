@@ -7,7 +7,7 @@ from raw UnifiedIncident data, enriching Slack alerts with actionable context.
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,34 +31,32 @@ class AISummarizer:
         self,
         model_name: str = DEFAULT_MODEL,
         location: str = DEFAULT_LOCATION,
-        project_id: Optional[str] = None,
-        client: Optional[Any] = None,
+        project_id: str | None = None,
+        client: Any | None = None,
     ):
         self.model_name = model_name
         self.location = location
-        self.project_id = project_id or os.environ.get(
-            "GCP_PROJECT_ID", ""
-        )
+        self.project_id = project_id or os.environ.get("GCP_PROJECT_ID", "")
         self._client = client
 
     def _get_client(self) -> Any:
         """Lazy-init the Vertex AI GenerativeModel."""
         if self._client is None:
             from google.cloud import aiplatform  # type: ignore
+
             aiplatform.init(
                 project=self.project_id,
                 location=self.location,
             )
             from vertexai.generative_models import GenerativeModel  # type: ignore
+
             self._client = GenerativeModel(
                 self.model_name,
                 system_instruction=SYSTEM_PROMPT,
             )
         return self._client
 
-    def summarize_incident(
-        self, incident_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def summarize_incident(self, incident_data: dict[str, Any]) -> dict[str, Any]:
         """
         Summarize an incident using Vertex AI Gemini.
 
@@ -70,9 +68,8 @@ class AISummarizer:
             On failure returns 'summary' with a fallback message.
         """
         try:
-            user_message = (
-                "Summarize the following security incident:\n\n"
-                + json.dumps(incident_data, indent=2, default=str)
+            user_message = "Summarize the following security incident:\n\n" + json.dumps(
+                incident_data, indent=2, default=str
             )
 
             model = self._get_client()
@@ -95,8 +92,8 @@ class AISummarizer:
     # ------------------------------------------------------------------
     @staticmethod
     def _fallback_summary(
-        incident_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        incident_data: dict[str, Any],
+    ) -> dict[str, Any]:
         """Return a rule-based summary when Vertex AI is unreachable."""
         severity = incident_data.get("severity", "UNKNOWN")
         resource = incident_data.get("resource", "N/A")

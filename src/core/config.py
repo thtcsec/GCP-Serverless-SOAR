@@ -23,35 +23,27 @@ class SOARConfig:
     exfiltration_threshold: int = field(
         default_factory=lambda: int(os.environ.get("EXFILTRATION_THRESHOLD", "10737418240"))
     )
-    severity_threshold: float = field(
-        default_factory=lambda: float(os.environ.get("SEVERITY_THRESHOLD", "7.0"))
-    )
+    severity_threshold: float = field(default_factory=lambda: float(os.environ.get("SEVERITY_THRESHOLD", "7.0")))
 
     # Networking
     isolation_tag: str = field(default_factory=lambda: os.environ.get("ISOLATION_TAG", "isolated-vm"))
     isolation_firewall_name: str = field(
         default_factory=lambda: os.environ.get("ISOLATION_FIREWALL_NAME", "soar-isolation-deny-all")
     )
-    forensic_jump_host_ip: str = field(
-        default_factory=lambda: os.environ.get("FORENSIC_JUMP_HOST_IP", "")
-    )
+    forensic_jump_host_ip: str = field(default_factory=lambda: os.environ.get("FORENSIC_JUMP_HOST_IP", ""))
 
     # Integrations
     slack_webhook_url: str = field(default_factory=lambda: os.environ.get("SLACK_WEBHOOK_URL", ""))
 
     # Workflow
     workflow_name: str = field(default_factory=lambda: os.environ.get("WORKFLOW_NAME", ""))
-    approval_wait_time: int = field(
-        default_factory=lambda: int(os.environ.get("APPROVAL_WAIT_TIME", "3600"))
-    )
+    approval_wait_time: int = field(default_factory=lambda: int(os.environ.get("APPROVAL_WAIT_TIME", "3600")))
 
     # Logging
     log_level: str = field(default_factory=lambda: os.environ.get("LOG_LEVEL", "INFO"))
 
     # Forensics
-    forensic_bucket: str = field(
-        default_factory=lambda: os.environ.get("FORENSIC_BUCKET", "")
-    )
+    forensic_bucket: str = field(default_factory=lambda: os.environ.get("FORENSIC_BUCKET", ""))
 
 
 # Singleton configuration instance

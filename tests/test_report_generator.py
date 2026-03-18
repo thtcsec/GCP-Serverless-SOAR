@@ -1,7 +1,9 @@
 """Unit tests for GCP Incident Report Generator."""
 
 import os
+
 import pytest
+
 from src.core.report_generator import ReportGenerator
 
 
@@ -29,16 +31,12 @@ def sample_incident():
 
 class TestReportGenerator:
     def test_generate_creates_file(self, sample_incident, tmp_path):
-        result = ReportGenerator.generate(
-            sample_incident, output_dir=str(tmp_path)
-        )
+        result = ReportGenerator.generate(sample_incident, output_dir=str(tmp_path))
         assert os.path.exists(result["report_path"])
         assert result["report_id"].startswith("IR-")
 
     def test_report_contains_key_fields(self, sample_incident, tmp_path):
-        result = ReportGenerator.generate(
-            sample_incident, output_dir=str(tmp_path)
-        )
+        result = ReportGenerator.generate(sample_incident, output_dir=str(tmp_path))
         content = result["report_content"]
         assert "CRITICAL" in content
         assert "vm-abc123" in content
@@ -51,17 +49,13 @@ class TestReportGenerator:
             {"action": "VM Isolated", "detail": "Firewall rules updated"},
             {"action": "Disk Snapshot", "detail": "snap-abc123"},
         ]
-        result = ReportGenerator.generate(
-            sample_incident, actions=actions, output_dir=str(tmp_path)
-        )
+        result = ReportGenerator.generate(sample_incident, actions=actions, output_dir=str(tmp_path))
         assert "VM Isolated" in result["report_content"]
         assert "Disk Snapshot" in result["report_content"]
 
     def test_report_with_custom_recommendations(self, sample_incident, tmp_path):
         recs = ["Rotate all SA keys", "Review Audit Logs"]
-        result = ReportGenerator.generate(
-            sample_incident, recommendations=recs, output_dir=str(tmp_path)
-        )
+        result = ReportGenerator.generate(sample_incident, recommendations=recs, output_dir=str(tmp_path))
         assert "Rotate all SA keys" in result["report_content"]
 
     def test_default_recommendations_critical(self):

@@ -1,7 +1,9 @@
 """Unit tests for GCP Auto-Remediation Patching."""
 
 from unittest.mock import MagicMock
+
 import pytest
+
 from src.core.auto_remediation import AutoRemediation
 
 

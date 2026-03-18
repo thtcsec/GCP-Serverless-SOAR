@@ -1,7 +1,10 @@
 """Tests for GCP Secret Rotation Manager."""
-import pytest
+
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
-from datetime import datetime, timezone, timedelta
+
+import pytest
+
 from src.core.secret_rotation import SecretRotationManager
 
 
@@ -15,18 +18,14 @@ class TestSecretRotationManager:
         return SecretRotationManager(secret_client=secret_client)
 
     def test_check_key_age_fresh(self, manager, secret_client):
-        secret_client.get_secret.return_value = MagicMock(
-            create_time=datetime.now(timezone.utc) - timedelta(days=10)
-        )
+        secret_client.get_secret.return_value = MagicMock(create_time=datetime.now(UTC) - timedelta(days=10))
         secret_client.access_secret_version.return_value = MagicMock()
         result = manager.check_key_age("my-project", "virustotal-api-key")
         assert result["age_days"] == 10
         assert result["needs_rotation"] is False
 
     def test_check_key_age_stale(self, manager, secret_client):
-        secret_client.get_secret.return_value = MagicMock(
-            create_time=datetime.now(timezone.utc) - timedelta(days=100)
-        )
+        secret_client.get_secret.return_value = MagicMock(create_time=datetime.now(UTC) - timedelta(days=100))
         secret_client.access_secret_version.return_value = MagicMock()
         result = manager.check_key_age("my-project", "virustotal-api-key")
         assert result["age_days"] == 100
@@ -43,9 +42,7 @@ class TestSecretRotationManager:
         assert result is False
 
     def test_get_rotation_report(self, manager, secret_client):
-        secret_client.get_secret.return_value = MagicMock(
-            create_time=datetime.now(timezone.utc) - timedelta(days=50)
-        )
+        secret_client.get_secret.return_value = MagicMock(create_time=datetime.now(UTC) - timedelta(days=50))
         secret_client.access_secret_version.return_value = MagicMock()
         report = manager.get_rotation_report("my-project", ["key1", "key2"])
         assert report["total_secrets"] == 2

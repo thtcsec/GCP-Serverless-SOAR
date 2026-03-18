@@ -6,7 +6,7 @@ Central registry that dispatches events to the correct playbook.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .base import Playbook
 
@@ -17,13 +17,13 @@ class PlaybookRegistry:
     """Thread-safe registry for SOAR playbooks."""
 
     def __init__(self) -> None:
-        self._playbooks: List[Playbook] = []
+        self._playbooks: list[Playbook] = []
 
     def register(self, playbook: Playbook) -> None:
         self._playbooks.append(playbook)
         logger.info(f"Registered playbook: {playbook.__class__.__name__}")
 
-    def dispatch(self, event_data: Dict[str, Any]) -> Optional[bool]:
+    def dispatch(self, event_data: dict[str, Any]) -> bool | None:
         """Find the first playbook that can handle the event and execute it."""
         for playbook in self._playbooks:
             if playbook.can_handle(event_data):

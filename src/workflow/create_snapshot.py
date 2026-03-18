@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import functions_framework
 from google.cloud import compute_v1
@@ -38,7 +38,7 @@ def create_snapshot(request):
 
         for disk in instance.disks:
             disk_name = disk.source.split("/")[-1]
-            ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+            ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
             snap_name = f"forensic-{instance_name}-{disk_name}-{ts}"
 
             snap = compute_v1.Snapshot(
@@ -59,7 +59,7 @@ def create_snapshot(request):
             **body,
             "snapshot_status": "success",
             "snapshots": snapshots_created,
-            "snapshot_timestamp": datetime.now(timezone.utc).isoformat(),
+            "snapshot_timestamp": datetime.now(UTC).isoformat(),
         }
         logger.info(f"Created {len(snapshots_created)} snapshots for {instance_name}")
         return json.dumps(result), 200, {"Content-Type": "application/json"}

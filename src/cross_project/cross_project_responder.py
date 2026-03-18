@@ -10,10 +10,11 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
-from google.auth import impersonated_credentials, default as auth_default
+from google.auth import default as auth_default
+from google.auth import impersonated_credentials
 from google.cloud import compute_v1, storage  # type: ignore[attr-defined]
 
 logger = logging.getLogger("gcp-soar.cross_project")
@@ -31,18 +32,22 @@ SCOPES = [
 class CrossProjectResponder:
     """Execute SOAR actions in a remote GCP project via SA impersonation."""
 
-    def __init__(self, environment: str = "dev", strict: Optional[bool] = None) -> None:
+    def __init__(self, environment: str = "dev", strict: bool | None = None) -> None:
         self.environment = environment
-        self.strict = strict if strict is not None else os.environ.get("CROSS_PROJECT_STRICT_CONFIG", "false").lower() == "true"
+        self.strict = (
+            strict if strict is not None else os.environ.get("CROSS_PROJECT_STRICT_CONFIG", "false").lower() == "true"
+        )
         self.account_map = self._load_account_map()
         self._validate_account_map()
         self.account = self.account_map.get(environment, {})
         self._validate_current_environment()
         self._credentials = None
 
-    def _load_account_map(self) -> Dict[str, Dict[str, str]]:
+    def _load_account_map(self) -> dict[str, dict[str, str]]:
         raw = os.environ.get("CROSS_PROJECT_ACCOUNT_MAP", "").strip()
-        account_map: Dict[str, Dict[str, str]] = {env: {"project_id": "", "target_sa": ""} for env in DEFAULT_ENVIRONMENTS}
+        account_map: dict[str, dict[str, str]] = {
+            env: {"project_id": "", "target_sa": ""} for env in DEFAULT_ENVIRONMENTS
+        }
         if raw:
             parsed = json.loads(raw)
             if not isinstance(parsed, dict):
@@ -64,7 +69,7 @@ class CrossProjectResponder:
         return account_map
 
     def _validate_account_map(self) -> None:
-        issues: List[str] = []
+        issues: list[str] = []
         for env, cfg in self.account_map.items():
             project_id = str(cfg.get("project_id", "")).strip()
             target_sa = str(cfg.get("target_sa", "")).strip()
@@ -125,7 +130,7 @@ class CrossProjectResponder:
     # Response actions
     # ------------------------------------------------------------------ #
 
-    def isolate_instance(self, zone: str, instance_name: str, isolation_tag: str = "isolated-vm") -> Dict[str, Any]:
+    def isolate_instance(self, zone: str, instance_name: str, isolation_tag: str = "isolated-vm") -> dict[str, Any]:
         """Isolate a VM in the target project by overwriting network tags."""
         project_id = self.account["project_id"]
         client = self._compute_client()
@@ -141,7 +146,7 @@ class CrossProjectResponder:
         logger.info(f"[{self.environment}] Isolated {instance_name}")
         return {"instance": instance_name, "original_tags": original_tags, "status": "isolated"}
 
-    def create_snapshot(self, zone: str, instance_name: str, category: str = "unknown") -> Dict[str, Any]:
+    def create_snapshot(self, zone: str, instance_name: str, category: str = "unknown") -> dict[str, Any]:
         """Create a forensic disk snapshot in the target project."""
         project_id = self.account["project_id"]
         client = self._compute_client()
@@ -153,13 +158,17 @@ class CrossProjectResponder:
             return {"error": "No boot disk found"}
 
         disk_name = boot_disk_url.split("/")[-1]
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         snap_name = f"forensic-xp-{instance_name}-{ts}"
 
         snap = compute_v1.Snapshot(
             name=snap_name,
             description=f"Cross-project forensic snapshot – {category}",
-            labels={"purpose": "incident-response", "source-project": project_id, "source-instance": instance_name},
+            labels={
+                "purpose": "incident-response",
+                "source-project": project_id,
+                "source-instance": instance_name,
+            },
         )
 
         disks_client = compute_v1.DisksClient(credentials=self._get_credentials())
@@ -168,14 +177,14 @@ class CrossProjectResponder:
         logger.info(f"[{self.environment}] Snapshot {snap_name} initiated")
         return {"snapshot": snap_name, "disk": disk_name}
 
-    def terminate_instance(self, zone: str, instance_name: str) -> Dict[str, Any]:
+    def terminate_instance(self, zone: str, instance_name: str) -> dict[str, Any]:
         project_id = self.account["project_id"]
         client = self._compute_client()
         client.stop(project=project_id, zone=zone, instance=instance_name)
         logger.info(f"[{self.environment}] Stopped {instance_name}")
         return {"instance": instance_name, "status": "stopped"}
 
-    def revoke_sa_credentials(self, sa_email: str) -> Dict[str, Any]:
+    def revoke_sa_credentials(self, sa_email: str) -> dict[str, Any]:
         """Disable all user-managed keys for a service account in the target project."""
         from google.cloud import iam_admin_v1
 
@@ -195,7 +204,7 @@ class CrossProjectResponder:
         logger.info(f"[{self.environment}] Disabled {len(disabled)} keys for {sa_email}")
         return {"service_account": sa_email, "disabled_keys": len(disabled)}
 
-    def secure_storage_bucket(self, bucket_name: str) -> Dict[str, Any]:
+    def secure_storage_bucket(self, bucket_name: str) -> dict[str, Any]:
         """Enable versioning, uniform access, and public-access prevention on a bucket."""
         client = self._storage_client()
         bucket = client.bucket(bucket_name)
@@ -206,9 +215,14 @@ class CrossProjectResponder:
         bucket.patch()
 
         logger.info(f"[{self.environment}] Secured bucket {bucket_name}")
-        return {"bucket": bucket_name, "versioning": True, "uniform_access": True, "public_access_prevention": True}
+        return {
+            "bucket": bucket_name,
+            "versioning": True,
+            "uniform_access": True,
+            "public_access_prevention": True,
+        }
 
-    def get_project_security_posture(self) -> Dict[str, Any]:
+    def get_project_security_posture(self) -> dict[str, Any]:
         """Summarise basic security metrics for the target project."""
         project_id = self.account["project_id"]
         compute = self._compute_client()
@@ -231,5 +245,5 @@ class CrossProjectResponder:
             "running_instances": running,
             "stopped_instances": stopped,
             "isolated_instances": isolated,
-            "assessed_at": datetime.now(timezone.utc).isoformat(),
+            "assessed_at": datetime.now(UTC).isoformat(),
         }
