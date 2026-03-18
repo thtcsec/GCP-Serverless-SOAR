@@ -21,25 +21,14 @@ provider "google" {
 }
 
 # ==========================================
-# Network (root-level .tf files at terraform/)
+# Root infra (network, security, compute, function - single module)
 # ==========================================
-module "network" {
+module "infra" {
   source = "../../"
 
-  project_id   = var.project_id
-  region       = var.region
-  network_name = "${var.environment}-soar-network"
-}
-
-# ==========================================
-# Security (root-level .tf files at terraform/)
-# ==========================================
-module "security" {
-  source = "../../"
-
-  project_id        = var.project_id
-  region            = var.region
-  network_self_link = module.network.network_self_link
+  project_id = var.project_id
+  region     = var.region
+  zone       = var.zone
 }
 
 # ==========================================
@@ -60,16 +49,6 @@ module "security_enterprise" {
 }
 
 # ==========================================
-# Cloud Functions (root-level .tf files at terraform/)
-# ==========================================
-module "function" {
-  source = "../../"
-
-  project_id = var.project_id
-  region     = var.region
-}
-
-# ==========================================
 # Enterprise Modules
 # ==========================================
 module "workflows" {
@@ -79,7 +58,7 @@ module "workflows" {
   project_id               = var.project_id
   region                   = var.region
   approval_wait_time        = var.approval_wait_time
-  isolation_firewall_name  = module.security.isolation_firewall_name
+  isolation_firewall_name  = module.infra.isolation_firewall_name
   labels                   = var.labels
 }
 
@@ -101,7 +80,7 @@ module "containers" {
   region                  = var.region
   isolation_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/isolation-worker:latest"
   forensics_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/forensics-worker:latest"
-  isolation_firewall_name = module.security.isolation_firewall_name
+  isolation_firewall_name = module.infra.isolation_firewall_name
   labels                  = var.labels
 }
 

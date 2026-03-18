@@ -1,18 +1,18 @@
 # Network
 output "network_self_link" {
   description = "Self link of the VPC network"
-  value       = module.network.network_self_link
+  value       = module.infra.network_self_link
 }
 
 output "subnet_self_link" {
   description = "Self link of the subnet"
-  value       = module.network.subnet_self_link
+  value       = module.infra.subnet_self_link
 }
 
 # Security
 output "isolation_firewall_name" {
   description = "Name of the isolation firewall rule"
-  value       = module.security.isolation_firewall_name
+  value       = module.infra.isolation_firewall_name
 }
 
 output "soar_central_sa_email" {
