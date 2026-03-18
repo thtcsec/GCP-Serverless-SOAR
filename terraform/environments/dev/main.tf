@@ -21,10 +21,10 @@ provider "google" {
 }
 
 # ==========================================
-# Network (root-level)
+# Network (root-level .tf files)
 # ==========================================
 module "network" {
-  source = "../../network"
+  source = "../"
 
   project_id   = var.project_id
   region       = var.region
@@ -32,18 +32,21 @@ module "network" {
 }
 
 # ==========================================
-# Security (root-level + module)
+# Security (root-level .tf files)
 # ==========================================
 module "security" {
-  source = "../../security"
+  source = "../"
 
   project_id        = var.project_id
   region            = var.region
   network_self_link = module.network.network_self_link
 }
 
+# ==========================================
+# Security Enterprise (from modules/)
+# ==========================================
 module "security_enterprise" {
-  source = "../../modules/security"
+  source = "../modules/security"
 
   environment = var.environment
   project_id  = var.project_id
@@ -57,33 +60,33 @@ module "security_enterprise" {
 }
 
 # ==========================================
-# Compute (root-level demo VM)
+# Compute (root-level .tf files)
 # ==========================================
 module "compute" {
-  source = "../../compute"
+  source = "../"
 
   project_id        = var.project_id
   region            = var.region
+  zone              = var.zone
   network_self_link = module.network.network_self_link
   subnet_self_link  = module.network.subnet_self_link
 }
 
 # ==========================================
-# Cloud Functions (root-level)
+# Cloud Functions (root-level .tf files)
 # ==========================================
 module "function" {
-  source = "../../function"
+  source = "../"
 
   project_id = var.project_id
   region     = var.region
-  depends_on = [module.network, module.security]
 }
 
 # ==========================================
 # Enterprise Modules
 # ==========================================
 module "workflows" {
-  source = "../../modules/workflows"
+  source = "../modules/workflows"
 
   environment             = var.environment
   project_id              = var.project_id
@@ -94,17 +97,17 @@ module "workflows" {
 }
 
 module "queues" {
-  source = "../../modules/queues"
+  source = "../modules/queues"
 
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  message_processor_image = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/message-processor:latest"
+  message_processor_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/message-processor:latest"
   labels                  = var.labels
 }
 
 module "containers" {
-  source = "../../modules/containers"
+  source = "../modules/containers"
 
   environment             = var.environment
   project_id              = var.project_id
@@ -116,7 +119,7 @@ module "containers" {
 }
 
 module "integrations" {
-  source = "../../modules/integrations"
+  source = "../modules/integrations"
 
   environment = var.environment
   project_id  = var.project_id

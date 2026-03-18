@@ -15,6 +15,12 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "zone" {
+  description = "GCP zone for Compute Engine instance"
+  type        = string
+  default     = "us-central1-a"
+}
+
 variable "org_id" {
   description = "GCP Organization ID for org-level policies"
   type        = string

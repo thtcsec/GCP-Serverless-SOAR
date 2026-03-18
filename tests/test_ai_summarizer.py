@@ -12,7 +12,11 @@ def mock_vertex_model():
     """Create a mock Vertex AI GenerativeModel."""
     model = MagicMock()
     response = MagicMock()
-    response.text = "A crypto miner was detected on instance vm-abc123. Severity is CRITICAL. Recommend immediate VM isolation and disk snapshot for forensics."
+    response.text = (
+        "A crypto miner was detected on instance vm-abc123. "
+        "Severity is CRITICAL. "
+        "Recommend immediate VM isolation and disk snapshot for forensics."
+    )
     model.generate_content.return_value = response
     return model
 

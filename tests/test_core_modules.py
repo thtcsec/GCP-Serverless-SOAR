@@ -83,7 +83,7 @@ class TestLogger:
         mock_logger = MagicMock()
         mock_get_logger.return_value = mock_logger
 
-        logger = get_logger("test")
+        get_logger("test")
         mock_get_logger.assert_called_once_with("test")
 
 

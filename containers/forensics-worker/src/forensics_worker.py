@@ -4,16 +4,16 @@ Long-running Cloud Run container for forensic analysis of compromised instances.
 Mounts disk snapshots, scans for indicators of compromise, and stores evidence.
 """
 
+import hashlib
 import json
 import logging
 import os
-import hashlib
 import re
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from google.cloud import compute_v1, storage
 
 # ---------------------------------------------------------------------------
@@ -36,9 +36,7 @@ FORENSICS_LOOKBACK_DAYS = int(os.environ.get("FORENSICS_LOOKBACK_DAYS", "7"))
 FORENSICS_MAX_FILE_SIZE = int(os.environ.get("FORENSICS_MAX_FILE_SIZE", str(5 * 1024 * 1024)))
 FORENSICS_LOG_MAX_LINES = int(os.environ.get("FORENSICS_LOG_MAX_LINES", "2000"))
 KNOWN_MALICIOUS_HASHES = {
-    h.strip().lower()
-    for h in os.environ.get("FORENSICS_KNOWN_BAD_HASHES", "").split(",")
-    if h.strip()
+    h.strip().lower() for h in os.environ.get("FORENSICS_KNOWN_BAD_HASHES", "").split(",") if h.strip()
 }
 SUSPICIOUS_NAME_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
@@ -74,14 +72,21 @@ DOMAIN_PATTERN = re.compile(r"\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+\b")
 # Forensic Worker
 # ---------------------------------------------------------------------------
 
+
 class GCPForensicsWorker:
     """Performs forensic evidence collection and analysis."""
 
     def __init__(self) -> None:
-        self.active_jobs: Dict[str, Dict] = {}
+        self.active_jobs: dict[str, dict] = {}
         self.job_counter = 0
 
-    def analyze_instance(self, instance_name: str, zone: str, snapshot_names: List[str] | None = None, job_id: str | None = None) -> Dict[str, Any]:
+    def analyze_instance(
+        self,
+        instance_name: str,
+        zone: str,
+        snapshot_names: list[str] | None = None,
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Run forensic analysis on a compromised instance.
 
@@ -94,13 +99,13 @@ class GCPForensicsWorker:
         """
         if not job_id:
             self.job_counter += 1
-            job_id = f"forensic-{int(datetime.now(timezone.utc).timestamp())}-{self.job_counter}"
+            job_id = f"forensic-{int(datetime.now(UTC).timestamp())}-{self.job_counter}"
 
         self.active_jobs[job_id] = {
             "instance_name": instance_name,
             "zone": zone,
             "status": "in_progress",
-            "start_time": datetime.now(timezone.utc).isoformat(),
+            "start_time": datetime.now(UTC).isoformat(),
             "steps": [],
         }
 
@@ -122,7 +127,7 @@ class GCPForensicsWorker:
             evidence_path = self._store_evidence(job_id, report)
 
             self.active_jobs[job_id]["status"] = "completed"
-            self.active_jobs[job_id]["end_time"] = datetime.now(timezone.utc).isoformat()
+            self.active_jobs[job_id]["end_time"] = datetime.now(UTC).isoformat()
 
             return {
                 "job_id": job_id,
@@ -144,7 +149,7 @@ class GCPForensicsWorker:
     # Internal steps
     # ------------------------------------------------------------------ #
 
-    def _collect_metadata(self, instance_name: str, zone: str, job_id: str) -> Dict[str, Any]:
+    def _collect_metadata(self, instance_name: str, zone: str, job_id: str) -> dict[str, Any]:
         """Gather instance metadata for forensic context."""
         try:
             client = compute_v1.InstancesClient()
@@ -186,7 +191,7 @@ class GCPForensicsWorker:
             return FORENSICS_SCAN_ROOT
         return ""
 
-    def _analyze_filesystem(self, snapshot_path: str) -> Dict[str, Any]:
+    def _analyze_filesystem(self, snapshot_path: str) -> dict[str, Any]:
         if not snapshot_path or not os.path.isdir(snapshot_path):
             return {
                 "scan_mode": "filesystem",
@@ -247,7 +252,7 @@ class GCPForensicsWorker:
                     result["suspicious_file_locations"].append(rel_path)
         return result
 
-    def _scan_malware(self, snapshot_path: str) -> Dict[str, Any]:
+    def _scan_malware(self, snapshot_path: str) -> dict[str, Any]:
         start = time.time()
         scan_result = {
             "scan_mode": "hash-signature",
@@ -309,28 +314,41 @@ class GCPForensicsWorker:
         scan_result["scan_duration_seconds"] = int(time.time() - start)
         return scan_result
 
-    def _analyze_activities(self, snapshot_path: str) -> List[Dict[str, Any]]:
+    def _analyze_activities(self, snapshot_path: str) -> list[dict[str, Any]]:
         if not snapshot_path or not os.path.isdir(snapshot_path):
             return []
-        findings: List[Dict[str, Any]] = []
+        findings: list[dict[str, Any]] = []
         for root, _, files in os.walk(snapshot_path):
             for file_name in files:
                 if not file_name.lower().endswith(".log"):
                     continue
                 log_path = os.path.join(root, file_name)
                 rel_path = os.path.relpath(log_path, snapshot_path)
-                evidence: List[str] = []
+                evidence: list[str] = []
                 detected_ips = set()
                 detected_domains = set()
                 try:
-                    with open(log_path, "r", encoding="utf-8", errors="ignore") as log_file:
+                    with open(log_path, encoding="utf-8", errors="ignore") as log_file:
                         for idx, line in enumerate(log_file):
                             if idx >= FORENSICS_LOG_MAX_LINES:
                                 break
                             if any(pattern.search(line) for pattern in SUSPICIOUS_COMMAND_PATTERNS):
                                 evidence.append(line.strip()[:220])
                             for ip in IP_PATTERN.findall(line):
-                                if not ip.startswith(("10.", "127.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.30.", "172.31.")):
+                                if not ip.startswith(
+                                    (
+                                        "10.",
+                                        "127.",
+                                        "192.168.",
+                                        "172.16.",
+                                        "172.17.",
+                                        "172.18.",
+                                        "172.19.",
+                                        "172.2",
+                                        "172.30.",
+                                        "172.31.",
+                                    )
+                                ):
                                     detected_ips.add(ip)
                             for domain in DOMAIN_PATTERN.findall(line):
                                 lowered = domain.lower()
@@ -351,7 +369,7 @@ class GCPForensicsWorker:
                     )
         return findings
 
-    def _calculate_snapshot_risk_score(self, analysis: Dict[str, Any]) -> int:
+    def _calculate_snapshot_risk_score(self, analysis: dict[str, Any]) -> int:
         base_score = 0
         malware_count = len(analysis.get("malware_scan", {}).get("threats_found", []))
         base_score += malware_count * 25
@@ -361,27 +379,29 @@ class GCPForensicsWorker:
         base_score += suspicious_files * 10
         return min(base_score, 100)
 
-    def _analyze_snapshots(self, snapshot_names: List[str], job_id: str) -> List[Dict]:
+    def _analyze_snapshots(self, snapshot_names: list[str], job_id: str) -> list[dict]:
         """Return metadata about each forensic snapshot."""
-        info: List[Dict] = []
+        info: list[dict] = []
         client = compute_v1.SnapshotsClient()
 
         for name in snapshot_names:
             try:
                 snap = client.get(project=PROJECT_ID, snapshot=name)
-                info.append({
-                    "name": snap.name,
-                    "status": snap.status,
-                    "disk_size_gb": snap.disk_size_gb,
-                    "storage_bytes": snap.storage_bytes,
-                    "created": snap.creation_timestamp,
-                    "labels": dict(snap.labels) if snap.labels else {},
-                    "scan_path": "",
-                    "file_system_analysis": {},
-                    "malware_scan": {},
-                    "suspicious_activities": [],
-                    "risk_score": 0,
-                })
+                info.append(
+                    {
+                        "name": snap.name,
+                        "status": snap.status,
+                        "disk_size_gb": snap.disk_size_gb,
+                        "storage_bytes": snap.storage_bytes,
+                        "created": snap.creation_timestamp,
+                        "labels": dict(snap.labels) if snap.labels else {},
+                        "scan_path": "",
+                        "file_system_analysis": {},
+                        "malware_scan": {},
+                        "suspicious_activities": [],
+                        "risk_score": 0,
+                    }
+                )
                 snapshot_path = self._resolve_snapshot_scan_path(name)
                 info[-1]["scan_path"] = snapshot_path
                 info[-1]["file_system_analysis"] = self._analyze_filesystem(snapshot_path)
@@ -394,12 +414,12 @@ class GCPForensicsWorker:
         self._log_step(job_id, "analyze_snapshots", "success", f"{len(info)} snapshots")
         return info
 
-    def _check_iocs(self, instance_name: str, metadata: Dict, snapshots: List[Dict], job_id: str) -> Dict[str, Any]:
+    def _check_iocs(self, instance_name: str, metadata: dict, snapshots: list[dict], job_id: str) -> dict[str, Any]:
         """
         Heuristic IOC checks based on available metadata.
         A real implementation would analyse disk images with YARA / ClamAV.
         """
-        findings: List[str] = []
+        findings: list[str] = []
         severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
 
         # Check for suspicious tags
@@ -425,14 +445,16 @@ class GCPForensicsWorker:
                 findings.append(f"Malware signature in snapshot {snapshot.get('name')}: {threat.get('threat_type')}")
                 severity_counts["high"] += 1
             for activity in snapshot.get("suspicious_activities", []):
-                findings.append(f"Suspicious log activity in snapshot {snapshot.get('name')}: {activity.get('description')}")
+                findings.append(
+                    f"Suspicious log activity in snapshot {snapshot.get('name')}: {activity.get('description')}"
+                )
                 severity_counts["medium"] += 1
 
         self._log_step(job_id, "check_iocs", "success", f"{len(findings)} findings")
         return {"findings": findings, "summary": severity_counts}
 
-    def _build_threat_intel(self, snapshots: List[Dict], job_id: str) -> Dict[str, Any]:
-        indicators: List[Dict[str, str]] = []
+    def _build_threat_intel(self, snapshots: list[dict], job_id: str) -> dict[str, Any]:
+        indicators: list[dict[str, str]] = []
         seen = set()
         for snapshot in snapshots:
             for threat in snapshot.get("malware_scan", {}).get("threats_found", []):
@@ -473,10 +495,10 @@ class GCPForensicsWorker:
         self._log_step(job_id, "threat_intel", "success", f"{len(indicators)} indicators")
         return {"indicators": indicators}
 
-    def _build_report(self, job_id, instance_name, zone, metadata, snapshots, iocs, threat_intel) -> Dict:
+    def _build_report(self, job_id, instance_name, zone, metadata, snapshots, iocs, threat_intel) -> dict:
         return {
             "job_id": job_id,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "instance": instance_name,
             "zone": zone,
             "metadata": metadata,
@@ -486,14 +508,14 @@ class GCPForensicsWorker:
             "threat_intelligence": threat_intel,
         }
 
-    def _store_evidence(self, job_id: str, report: Dict) -> str:
+    def _store_evidence(self, job_id: str, report: dict) -> str:
         """Upload forensic report to the evidence GCS bucket."""
         if not FORENSIC_BUCKET:
             logger.warning("FORENSIC_BUCKET not set — skipping evidence upload")
             return ""
 
         client = storage.Client()
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d")
+        ts = datetime.now(UTC).strftime("%Y%m%d")
         blob_path = f"forensics/{report['instance']}/{ts}/{job_id}.json"
 
         bucket = client.bucket(FORENSIC_BUCKET)
@@ -507,7 +529,7 @@ class GCPForensicsWorker:
     # ------------------------------------------------------------------ #
 
     def _log_step(self, job_id: str, step: str, status: str, detail: str = "") -> None:
-        entry = {"step": step, "status": status, "detail": detail, "timestamp": datetime.now(timezone.utc).isoformat()}
+        entry = {"step": step, "status": status, "detail": detail, "timestamp": datetime.now(UTC).isoformat()}
         if job_id in self.active_jobs:
             self.active_jobs[job_id]["steps"].append(entry)
         logger.info(f"[{job_id}] {step}: {status} {detail}")

@@ -39,7 +39,7 @@ resource "google_workflows_workflow" "incident_response" {
 - init:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity}:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
       body:
         finding: ${finding}
     result: severity_result
@@ -47,7 +47,7 @@ resource "google_workflows_workflow" "incident_response" {
 - detect_severity:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
       body:
         finding: ${finding}
     result: severity_analysis
@@ -55,7 +55,7 @@ resource "google_workflows_workflow" "incident_response" {
 - isolate_instance:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-isolate-instance:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-isolate-instance/execute
       body:
         instance_data: ${severity_analysis.instance_data}
         severity: ${severity_analysis.severity_level}
@@ -64,7 +64,7 @@ resource "google_workflows_workflow" "incident_response" {
 - create_snapshot:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-create-snapshot:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-create-snapshot/execute
       body:
         instance_data: ${severity_analysis.instance_data}
     result: snapshot_result
@@ -87,7 +87,7 @@ resource "google_workflows_workflow" "incident_response" {
 - terminate_instance:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-terminate-instance:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-terminate-instance/execute
       body:
         instance_data: ${severity_analysis.instance_data}
     result: termination_result
@@ -95,7 +95,7 @@ resource "google_workflows_workflow" "incident_response" {
 - manual_investigation:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-notify-team:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-notify-team/execute
       body:
         message: "Manual investigation required for instance ${severity_analysis.instance_data.instance_name}"
     result: notification_result
@@ -136,7 +136,7 @@ resource "google_workflows_workflow" "detect_severity" {
 - analyze_finding:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity:execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
       body:
         finding: ${finding}
     result: severity_result

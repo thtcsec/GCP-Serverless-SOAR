@@ -56,13 +56,15 @@ class TestStorageExfilResponse:
         }
 
         payload = make_cloud_event().data["protoPayload"]
-        with patch(
-            "src.storage_exfil_response.analyze_exfiltration_patterns",
-            return_value={"is_exfiltration": True, "risk_score": 10},
+        with (
+            patch(
+                "src.storage_exfil_response.analyze_exfiltration_patterns",
+                return_value={"is_exfiltration": True, "risk_score": 10},
+            ),
+            patch("src.storage_exfil_response.execute_exfiltration_response") as mock_exec,
         ):
-            with patch("src.storage_exfil_response.execute_exfiltration_response") as mock_exec:
-                resp.process_storage_event(payload)
-                mock_exec.assert_called_once()
+            resp.process_storage_event(payload)
+            mock_exec.assert_called_once()
 
     def test_extract_bucket_name(self):
         assert resp.extract_bucket_name("projects/_/buckets/b/objects/o") == "b"

@@ -24,7 +24,9 @@ class TestGCEContainmentPlaybook:
             "name": "organizations/123/sources/456/findings/789",
             "category": "Cryptocurrency mining",
             "severity": "HIGH",
-            "resourceName": "//compute.googleapis.com/projects/test-project/zones/us-central1-a/instances/test-instance",
+            "resourceName": (
+                "//compute.googleapis.com/projects/test-project/zones/us-central1-a/instances/test-instance"
+            ),
             "state": "ACTIVE",
             "eventTime": "2026-03-10T00:00:00Z",
             "createTime": "2026-03-10T00:00:00Z",
