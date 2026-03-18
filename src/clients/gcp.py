@@ -5,8 +5,10 @@ Centralised, lazily-initialised Google Cloud client management.
 
 from functools import lru_cache
 
-from google.cloud import compute_v1
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.cloud import (
+    compute_v1,
+    storage,  # type: ignore[attr-defined]
+)
 from google.cloud import logging as cloud_logging
 
 
