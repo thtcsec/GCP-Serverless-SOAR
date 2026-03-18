@@ -16,7 +16,7 @@ terraform {
 # ==========================================
 resource "google_workflows_workflow" "incident_response" {
   name        = "${var.environment}-soar-incident-response"
-  location    = var.region
+  region      = var.region
   description = "Enterprise SOAR incident response workflow"
 
   # Define the workflow in YAML format
@@ -129,7 +129,7 @@ EOF
 # Severity Detection Workflow
 resource "google_workflows_workflow" "detect_severity" {
   name        = "${var.environment}-soar-detect-severity"
-  location    = var.region
+  region      = var.region
   description = "Detect severity of security findings"
 
   source_contents = <<-EOF
@@ -188,7 +188,7 @@ EOF
 # Instance Isolation Workflow
 resource "google_workflows_workflow" "isolate_instance" {
   name        = "${var.environment}-soar-isolate-instance"
-  location    = var.region
+  region      = var.region
   description = "Isolate compromised compute instances"
 
   source_contents = <<-EOF
@@ -261,7 +261,7 @@ EOF
 # Snapshot Creation Workflow
 resource "google_workflows_workflow" "create_snapshot" {
   name        = "${var.environment}-soar-create-snapshot"
-  location    = var.region
+  region      = var.region
   description = "Create forensic snapshots of compute instances"
 
   source_contents = <<-EOF

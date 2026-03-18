@@ -199,7 +199,7 @@ resource "google_pubsub_subscription" "security_events_push" {
   }
 
   # Acknowledgement deadline for push
-  ack_deadline = 600 # 10 minutes
+  ack_deadline_seconds = 600 # 10 minutes
 
   labels = merge(
     var.labels,
@@ -217,21 +217,19 @@ resource "google_eventarc_trigger" "scc_findings_trigger" {
   name     = "${var.environment}-soar-scc-findings"
   location = var.region
 
-  event_type = "google.cloud.securitycenter.v1.FindingPublished"
-  
-  service_account = google_service_account.message_processor_sa.email
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.securitycenter.v1.FindingPublished"
+  }
 
   destination {
-    cloud_run {
+    cloud_run_service {
       service = google_cloud_run_service.message_processor.name
       region  = var.region
     }
   }
 
-  filtering {
-    attribute = "type"
-    value     = "google.cloud.securitycenter.v1.FindingPublished"
-  }
+  service_account = google_service_account.message_processor_sa.email
 
   labels = merge(
     var.labels,
@@ -246,21 +244,24 @@ resource "google_eventarc_trigger" "audit_log_trigger" {
   name     = "${var.environment}-soar-audit-logs"
   location = var.region
 
-  event_type = "google.cloud.audit.log.v1.written"
-  
-  service_account = google_service_account.message_processor_sa.email
+  matching_criteria {
+    attribute = "type"
+    value     = "google.cloud.audit.log.v1.written"
+  }
+
+  matching_criteria {
+    attribute = "methodName"
+    value     = "compute.instances.insert"
+  }
 
   destination {
-    cloud_run {
+    cloud_run_service {
       service = google_cloud_run_service.message_processor.name
       region  = var.region
     }
   }
 
-  filtering {
-    attribute = "methodName"
-    value     = "compute.instances.insert"
-  }
+  service_account = google_service_account.message_processor_sa.email
 
   labels = merge(
     var.labels,
