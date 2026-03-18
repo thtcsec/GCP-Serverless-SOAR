@@ -24,7 +24,7 @@ provider "google" {
 # Network (root-level .tf files at terraform/)
 # ==========================================
 module "network" {
-  source = "../../terraform"
+  source = "../../"
 
   project_id   = var.project_id
   region       = var.region
@@ -35,7 +35,7 @@ module "network" {
 # Security (root-level .tf files at terraform/)
 # ==========================================
 module "security" {
-  source = "../../terraform"
+  source = "../../"
 
   project_id        = var.project_id
   region            = var.region
@@ -46,7 +46,7 @@ module "security" {
 # Security Enterprise (from modules/)
 # ==========================================
 module "security_enterprise" {
-  source = "../modules/security"
+  source = "../../modules/security"
 
   environment = var.environment
   project_id  = var.project_id
@@ -63,7 +63,7 @@ module "security_enterprise" {
 # Compute (root-level .tf files at terraform/)
 # ==========================================
 module "compute" {
-  source = "../../terraform"
+  source = "../../"
 
   project_id        = var.project_id
   region            = var.region
@@ -76,7 +76,7 @@ module "compute" {
 # Cloud Functions (root-level .tf files at terraform/)
 # ==========================================
 module "function" {
-  source = "../../terraform"
+  source = "../../"
 
   project_id = var.project_id
   region     = var.region
@@ -86,7 +86,7 @@ module "function" {
 # Enterprise Modules
 # ==========================================
 module "workflows" {
-  source = "../modules/workflows"
+  source = "../../modules/workflows"
 
   environment             = var.environment
   project_id              = var.project_id
@@ -97,7 +97,7 @@ module "workflows" {
 }
 
 module "queues" {
-  source = "../modules/queues"
+  source = "../../modules/queues"
 
   environment             = var.environment
   project_id              = var.project_id
@@ -107,7 +107,7 @@ module "queues" {
 }
 
 module "containers" {
-  source = "../modules/containers"
+  source = "../../modules/containers"
 
   environment             = var.environment
   project_id              = var.project_id
@@ -119,7 +119,7 @@ module "containers" {
 }
 
 module "integrations" {
-  source = "../modules/integrations"
+  source = "../../modules/integrations"
 
   environment = var.environment
   project_id  = var.project_id
