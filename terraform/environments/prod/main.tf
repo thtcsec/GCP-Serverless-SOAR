@@ -21,7 +21,7 @@ provider "google" {
 }
 
 # ==========================================
-# Network (root-level .tf files)
+# Network (root-level .tf files at terraform/)
 # ==========================================
 module "network" {
   source = "../"
@@ -32,7 +32,7 @@ module "network" {
 }
 
 # ==========================================
-# Security (root-level .tf files)
+# Security (root-level .tf files at terraform/)
 # ==========================================
 module "security" {
   source = "../"
@@ -60,7 +60,7 @@ module "security_enterprise" {
 }
 
 # ==========================================
-# Cloud Functions (root-level .tf files)
+# Cloud Functions (root-level .tf files at terraform/)
 # ==========================================
 module "function" {
   source = "../"
@@ -75,11 +75,11 @@ module "function" {
 module "workflows" {
   source = "../modules/workflows"
 
-  environment             = var.environment
-  project_id              = var.project_id
-  region                  = var.region
-  approval_wait_time       = var.approval_wait_time
-  isolation_firewall_name = module.security.isolation_firewall_name
+  environment              = var.environment
+  project_id               = var.project_id
+  region                   = var.region
+  approval_wait_time        = var.approval_wait_time
+  isolation_firewall_name  = module.security.isolation_firewall_name
   labels                  = var.labels
 }
 
@@ -90,7 +90,7 @@ module "queues" {
   project_id              = var.project_id
   region                  = var.region
   message_processor_image = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/message-processor:latest"
-  labels                 = var.labels
+  labels                  = var.labels
 }
 
 module "containers" {
@@ -99,22 +99,20 @@ module "containers" {
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  isolation_worker_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/isolation-worker:latest"
-  forensics_worker_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/forensics-worker:latest"
+  isolation_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/isolation-worker:latest"
+  forensics_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/forensics-worker:latest"
   isolation_firewall_name = module.security.isolation_firewall_name
-  labels                 = var.labels
+  labels                  = var.labels
 }
 
 module "integrations" {
   source = "../modules/integrations"
 
-  environment = var.environment
-  project_id  = var.project_id
-  region      = var.region
-
-  enable_slack_integration = var.enable_slack_integration
-  enable_jira_integration = var.enable_jira_integration
-  enable_siem_integration = var.enable_siem_integration
-
-  labels = var.labels
+  environment              = var.environment
+  project_id               = var.project_id
+  region                   = var.region
+  enable_slack_integration  = var.enable_slack_integration
+  enable_jira_integration  = var.enable_jira_integration
+  enable_siem_integration   = var.enable_siem_integration
+  labels                   = var.labels
 }

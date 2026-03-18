@@ -21,7 +21,7 @@ provider "google" {
 }
 
 # ==========================================
-# Network (root-level .tf files)
+# Network (root-level .tf files at terraform/)
 # ==========================================
 module "network" {
   source = "../"
@@ -32,7 +32,7 @@ module "network" {
 }
 
 # ==========================================
-# Security (root-level .tf files)
+# Security (root-level .tf files at terraform/)
 # ==========================================
 module "security" {
   source = "../"
@@ -60,7 +60,7 @@ module "security_enterprise" {
 }
 
 # ==========================================
-# Compute (root-level .tf files)
+# Compute (root-level .tf files at terraform/)
 # ==========================================
 module "compute" {
   source = "../"
@@ -73,7 +73,7 @@ module "compute" {
 }
 
 # ==========================================
-# Cloud Functions (root-level .tf files)
+# Cloud Functions (root-level .tf files at terraform/)
 # ==========================================
 module "function" {
   source = "../"
@@ -91,8 +91,8 @@ module "workflows" {
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  approval_wait_time      = var.approval_wait_time
-  isolation_firewall_name = module.security.isolation_firewall_name
+  approval_wait_time       = var.approval_wait_time
+  isolation_firewall_name  = module.security.isolation_firewall_name
   labels                  = var.labels
 }
 
@@ -102,7 +102,7 @@ module "queues" {
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  message_processor_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/message-processor:latest"
+  message_processor_image = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/message-processor:latest"
   labels                  = var.labels
 }
 

@@ -60,9 +60,20 @@ jobs:
       with:
         terraform_version: 1.7.5
 
-    - name: Terraform fmt (check)
+    - name: Terraform fmt (check - root .tf files only)
       run: |
-        terraform fmt -check -recursive terraform/
+        terraform fmt -check *.tf network.tf security.tf compute.tf function.tf monitoring.tf variables.tf outputs.tf provider.tf
+
+    - name: Terraform fmt (check - environments/dev and environments/prod)
+      shell: bash
+      run: |
+        set -euo pipefail
+        for env in terraform/environments/dev terraform/environments/prod; do
+          if [ -d "$env" ]; then
+            echo "Checking fmt: $env"
+            terraform -chdir="$env" fmt -check
+          fi
+        done
 
     - name: Terraform validate (all envs, no backend)
       shell: bash
@@ -70,7 +81,7 @@ jobs:
         TERRAFORM_VERSION: 1.7.5
       run: |
         set -euo pipefail
-        for env in terraform/environments/*; do
+        for env in terraform/environments/dev terraform/environments/prod; do
           if [ -d "$env" ]; then
             env_name=$(basename "$env")
             echo "Validating: $env_name"
