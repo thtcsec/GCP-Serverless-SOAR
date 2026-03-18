@@ -87,8 +87,8 @@ class AuditLogPayload(BaseModel):
     resource_name: str = Field("", alias="resourceName")
     service_name: str = Field("", alias="serviceName")
     authentication_info: AuthenticationInfo = Field(
-        default_factory=lambda: AuthenticationInfo(),
-        alias="authenticationInfo",  # type: ignore[call-arg]
+        default_factory=lambda: AuthenticationInfo(principal_email=""),
+        alias="authenticationInfo",
     )
     status: dict[str, Any] = Field(default_factory=dict)
     request: dict[str, Any] = Field(default_factory=dict)
