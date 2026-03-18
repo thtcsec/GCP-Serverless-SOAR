@@ -24,7 +24,7 @@ provider "google" {
 # Network (root-level .tf files at terraform/)
 # ==========================================
 module "network" {
-  source = "../"
+  source = "../../terraform"
 
   project_id   = var.project_id
   region       = var.region
@@ -35,7 +35,7 @@ module "network" {
 # Security (root-level .tf files at terraform/)
 # ==========================================
 module "security" {
-  source = "../"
+  source = "../../terraform"
 
   project_id        = var.project_id
   region            = var.region
@@ -63,7 +63,7 @@ module "security_enterprise" {
 # Cloud Functions (root-level .tf files at terraform/)
 # ==========================================
 module "function" {
-  source = "../"
+  source = "../../terraform"
 
   project_id = var.project_id
   region     = var.region

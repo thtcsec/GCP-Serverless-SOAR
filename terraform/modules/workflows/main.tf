@@ -39,76 +39,76 @@ resource "google_workflows_workflow" "incident_response" {
 - init:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-detect-severity/execute
       body:
-        finding: ${finding}
+        finding: $${finding}
     result: severity_result
 
 - detect_severity:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-detect-severity/execute
       body:
-        finding: ${finding}
+        finding: $${finding}
     result: severity_analysis
 
 - isolate_instance:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-isolate-instance/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-isolate-instance/execute
       body:
-        instance_data: ${severity_analysis.instance_data}
-        severity: ${severity_analysis.severity_level}
+        instance_data: $${severity_analysis.instance_data}
+        severity: $${severity_analysis.severity_level}
     result: isolation_result
 
 - create_snapshot:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-create-snapshot/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-create-snapshot/execute
       body:
-        instance_data: ${severity_analysis.instance_data}
+        instance_data: $${severity_analysis.instance_data}
     result: snapshot_result
 
 - human_approval:
     call: sys.sleep
     args:
-      seconds: ${var.approval_wait_time}
+      seconds: $${var.approval_wait_time}
     next: check_approval
 
 - check_approval:
     switch:
-      - condition: ${approval_status == "approved"}
+      - condition: $${approval_status == "approved"}
         next: terminate_instance
-      - condition: ${approval_status == "rejected"}
+      - condition: $${approval_status == "rejected"}
         next: manual_investigation
-      - condition: ${approval_status == "timeout"}
+      - condition: $${approval_status == "timeout"}
         next: terminate_instance
 
 - terminate_instance:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-terminate-instance/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-terminate-instance/execute
       body:
-        instance_data: ${severity_analysis.instance_data}
+        instance_data: $${severity_analysis.instance_data}
     result: termination_result
 
 - manual_investigation:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-notify-team/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-notify-team/execute
       body:
-        message: "Manual investigation required for instance ${severity_analysis.instance_data.instance_name}"
+        message: "Manual investigation required for instance $${severity_analysis.instance_data.instance_name}"
     result: notification_result
 
 - final_result:
     return:
-      workflow_id: ${sys.get_workflow_id()}
-      execution_id: ${sys.get_execution_id()}
-      severity_analysis: ${severity_analysis}
-      isolation_result: ${isolation_result}
-      snapshot_result: ${snapshot_result}
-      termination_result: ${termination_result}
-      timestamp: ${sys.get_time()}
+      workflow_id: $${sys.get_workflow_id()}
+      execution_id: $${sys.get_execution_id()}
+      severity_analysis: $${severity_analysis}
+      isolation_result: $${isolation_result}
+      snapshot_result: $${snapshot_result}
+      termination_result: $${termination_result}
+      timestamp: $${sys.get_time()}
 EOF
 
   service_account = google_service_account.workflow_sa.email
@@ -136,24 +136,24 @@ resource "google_workflows_workflow" "detect_severity" {
 - analyze_finding:
     call: http.post
     args:
-      url: https://workflowexecutions.googleapis.com/v1/projects/${sys.get_project_id()}/locations/${sys.get_region()}/workflows/${var.environment}-soar-detect-severity/execute
+      url: https://workflowexecutions.googleapis.com/v1/projects/$${sys.get_project_id()}/locations/$${sys.get_region()}/workflows/$${var.environment}-soar-detect-severity/execute
       body:
-        finding: ${finding}
+        finding: $${finding}
     result: severity_result
 
 - classify_severity:
     switch:
-      - condition: ${severity_result.severity_score >= 8.0}
+      - condition: $${severity_result.severity_score >= 8.0}
         assign:
           - severity_level: "CRITICAL"
           - priority: "P1"
           - requires_approval: true
-      - condition: ${severity_result.severity_score >= 6.0}
+      - condition: $${severity_result.severity_score >= 6.0}
         assign:
           - severity_level: "HIGH"
           - priority: "P2"
           - requires_approval: true
-      - condition: ${severity_result.severity_score >= 4.0}
+      - condition: $${severity_result.severity_score >= 4.0}
         assign:
           - severity_level: "MEDIUM"
           - priority: "P3"
@@ -166,12 +166,12 @@ resource "google_workflows_workflow" "detect_severity" {
 
 - return_result:
     return:
-      severity_level: ${severity_level}
-      priority: ${priority}
-      requires_approval: ${requires_approval}
-      severity_score: ${severity_result.severity_score}
-      instance_data: ${severity_result.instance_data}
-      analysis_timestamp: ${sys.get_time()}
+      severity_level: $${severity_level}
+      priority: $${priority}
+      requires_approval: $${requires_approval}
+      severity_score: $${severity_result.severity_score}
+      instance_data: $${severity_result.instance_data}
+      analysis_timestamp: $${sys.get_time()}
 EOF
 
   service_account = google_service_account.workflow_sa.email
@@ -195,16 +195,16 @@ resource "google_workflows_workflow" "isolate_instance" {
 - validate_instance:
     call: compute.instances.get
     args:
-      project: ${sys.get_project_id()}
-      zone: ${instance_data.zone}
-      instance: ${instance_data.instance_name}
+      project: $${sys.get_project_id()}
+      zone: $${instance_data.zone}
+      instance: $${instance_data.instance_name}
     result: instance_details
 
 - apply_firewall_rules:
     call: compute.firewalls.patch
     args:
-      project: ${sys.get_project_id()}
-      firewall: ${var.isolation_firewall_name}
+      project: $${sys.get_project_id()}
+      firewall: $${var.isolation_firewall_name}
       body:
         denied:
           - ipProtocol: "TCP"
@@ -213,38 +213,38 @@ resource "google_workflows_workflow" "isolate_instance" {
         direction: "INGRESS"
         priority: 1
         targetTags:
-          - "isolated-${instance_data.instance_name}"
+          - "isolated-$${instance_data.instance_name}"
     result: firewall_result
 
 - update_instance_tags:
     call: compute.instances.setTags
     args:
-      project: ${sys.get_project_id()}
-      zone: ${instance_data.zone}
-      instance: ${instance_data.instance_name}
+      project: $${sys.get_project_id()}
+      zone: $${instance_data.zone}
+      instance: $${instance_data.instance_name}
       tags:
         items:
-          - fingerprint: ${instance_details.tags.fingerprint}
+          - fingerprint: $${instance_details.tags.fingerprint}
           - labels:
               isolation-status: "isolated"
-              isolation-timestamp: "${sys.get_time()}"
+              isolation-timestamp: "$${sys.get_time()}"
     result: tag_result
 
 - verify_isolation:
     call: compute.instances.get
     args:
-      project: ${sys.get_project_id()}
-      zone: ${instance_data.zone}
-      instance: ${instance_data.instance_name}
+      project: $${sys.get_project_id()}
+      zone: $${instance_data.zone}
+      instance: $${instance_data.instance_name}
     result: verification_result
 
 - return_result:
     return:
-      instance_name: ${instance_data.instance_name}
+      instance_name: $${instance_data.instance_name}
       isolation_successful: true
-      isolation_timestamp: ${sys.get_time()}
-      firewall_rules_applied: ${firewall_result.name}
-      verification_result: ${verification_result}
+      isolation_timestamp: $${sys.get_time()}
+      firewall_rules_applied: $${firewall_result.name}
+      verification_result: $${verification_result}
 EOF
 
   service_account = google_service_account.workflow_sa.email
@@ -268,40 +268,40 @@ resource "google_workflows_workflow" "create_snapshot" {
 - get_instance_details:
     call: compute.instances.get
     args:
-      project: ${sys.get_project_id()}
-      zone: ${instance_data.zone}
-      instance: ${instance_data.instance_name}
+      project: $${sys.get_project_id()}
+      zone: $${instance_data.zone}
+      instance: $${instance_data.instance_name}
     result: instance_details
 
 - create_disk_snapshot:
     call: compute.disks.createSnapshot
     args:
-      project: ${sys.get_project_id()}
-      disk: ${instance_details.disks[0].source}
+      project: $${sys.get_project_id()}
+      disk: $${instance_details.disks[0].source}
       body:
-        name: "forensic-${instance_data.instance_name}-${sys.get_time()}"
+        name: "forensic-$${instance_data.instance_name}-$${sys.get_time()}"
         description: "Forensic snapshot for incident response"
         labels:
           purpose: "forensic-analysis"
-          instance-name: "${instance_data.instance_name}"
+          instance-name: "$${instance_data.instance_name}"
           created-by: "soar-workflow"
-          environment: "${var.environment}"
+          environment: "$${var.environment}"
     result: snapshot_result
 
 - wait_for_snapshot:
     call: compute.snapshots.get
     args:
-      project: ${sys.get_project_id()}
-      snapshot: ${snapshot_result.name}
+      project: $${sys.get_project_id()}
+      snapshot: $${snapshot_result.name}
     result: snapshot_status
 
 - return_result:
     return:
-      instance_name: ${instance_data.instance_name}
-      snapshot_name: ${snapshot_result.name}
-      snapshot_status: ${snapshot_status.status}
-      creation_timestamp: ${sys.get_time()}
-      disk_size_gb: ${instance_details.disks[0].diskSizeGb}
+      instance_name: $${instance_data.instance_name}
+      snapshot_name: $${snapshot_result.name}
+      snapshot_status: $${snapshot_status.status}
+      creation_timestamp: $${sys.get_time()}
+      disk_size_gb: $${instance_details.disks[0].diskSizeGb}
 EOF
 
   service_account = google_service_account.workflow_sa.email
