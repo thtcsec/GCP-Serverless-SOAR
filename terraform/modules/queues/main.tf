@@ -26,9 +26,6 @@ resource "google_pubsub_topic" "security_events" {
   )
 
   message_retention_duration = "604800s" # 7 days
-
-  # Enable message ordering
-  enable_message_ordering = false
 }
 
 # ==========================================
@@ -71,7 +68,7 @@ resource "google_pubsub_subscription" "security_events_subscription" {
   message_retention_duration = "86400s" # 1 day
 
   # Acknowledgement deadline
-  ack_deadline = 300 # 5 minutes
+  ack_deadline_seconds = 300 # 5 minutes
 
   # Enable exactly-once delivery
   enable_exactly_once_delivery = true
@@ -93,6 +90,15 @@ resource "google_cloud_run_service" "message_processor" {
   location = var.region
 
   template {
+    metadata {
+      labels = merge(
+        var.labels,
+        {
+          environment = var.environment
+          purpose     = "message-processing"
+        },
+      )
+    }
     spec {
       containers {
         image = var.message_processor_image
@@ -134,14 +140,6 @@ resource "google_cloud_run_service" "message_processor" {
     percent = 100
     latest_revision = true
   }
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "message-processing"
-    }
-  )
 }
 
 # ==========================================
@@ -151,14 +149,6 @@ resource "google_service_account" "message_processor_sa" {
   account_id   = "${var.environment}-soar-message-processor"
   display_name = "SOAR Message Processor Service Account"
   description  = "Service account for SOAR message processor Cloud Run service"
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "message-processing"
-    }
-  )
 }
 
 # ==========================================

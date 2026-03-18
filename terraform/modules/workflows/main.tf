@@ -322,14 +322,6 @@ resource "google_service_account" "workflow_sa" {
   account_id   = "${var.environment}-soar-workflow-sa"
   display_name = "SOAR Workflow Service Account"
   description  = "Service account for SOAR Cloud Workflows"
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "soar-workflows"
-    }
-  )
 }
 
 # ==========================================

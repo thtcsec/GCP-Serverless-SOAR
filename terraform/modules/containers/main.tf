@@ -19,6 +19,15 @@ resource "google_cloud_run_service" "isolation_worker" {
   location = var.region
 
   template {
+    metadata {
+      labels = merge(
+        var.labels,
+        {
+          environment = var.environment
+          purpose     = "isolation-worker"
+        },
+      )
+    }
     spec {
       containers {
         image = var.isolation_worker_image
@@ -83,14 +92,6 @@ resource "google_cloud_run_service" "isolation_worker" {
     percent = 100
     latest_revision = true
   }
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "isolation-worker"
-    }
-  )
 }
 
 # ==========================================
@@ -101,6 +102,15 @@ resource "google_cloud_run_service" "forensics_worker" {
   location = var.region
 
   template {
+    metadata {
+      labels = merge(
+        var.labels,
+        {
+          environment = var.environment
+          purpose     = "forensics-worker"
+        },
+      )
+    }
     spec {
       containers {
         image = var.forensics_worker_image
@@ -165,14 +175,6 @@ resource "google_cloud_run_service" "forensics_worker" {
     percent = 100
     latest_revision = true
   }
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "forensics-worker"
-    }
-  )
 }
 
 # ==========================================
@@ -182,28 +184,12 @@ resource "google_service_account" "isolation_worker_sa" {
   account_id   = "${var.environment}-soar-isolation-worker"
   display_name = "SOAR Isolation Worker Service Account"
   description  = "Service account for SOAR isolation worker Cloud Run service"
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "isolation-worker"
-    }
-  )
 }
 
 resource "google_service_account" "forensics_worker_sa" {
   account_id   = "${var.environment}-soar-forensics-worker"
   display_name = "SOAR Forensics Worker Service Account"
   description  = "Service account for SOAR forensics worker Cloud Run service"
-
-  labels = merge(
-    var.labels,
-    {
-      environment = var.environment
-      purpose     = "forensics-worker"
-    }
-  )
 }
 
 # ==========================================

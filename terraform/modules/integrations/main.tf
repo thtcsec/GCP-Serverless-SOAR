@@ -187,7 +187,7 @@ resource "google_pubsub_subscription" "slack_push" {
     }
   }
 
-  ack_deadline = 60
+  ack_deadline_seconds = 60
 
   labels = merge(var.labels, { purpose = "slack-push" })
 }
@@ -205,7 +205,7 @@ resource "google_pubsub_subscription" "jira_push" {
     }
   }
 
-  ack_deadline = 120
+  ack_deadline_seconds = 120
 
   labels = merge(var.labels, { purpose = "jira-push" })
 }
@@ -223,7 +223,7 @@ resource "google_pubsub_subscription" "siem_push" {
     }
   }
 
-  ack_deadline = 120
+  ack_deadline_seconds = 120
 
   labels = merge(var.labels, { purpose = "siem-push" })
 }
