@@ -151,3 +151,114 @@ class PubSubMessage(BaseModel):
     publish_time: str | None = Field(None, alias="publishTime")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# ---------------------------------------------------------------------------
+# Cloud SQL Audit Event Models (Nhóm 1)
+# ---------------------------------------------------------------------------
+
+RISKY_CLOUDSQL_METHODS: list[str] = [
+    "sql.instances.update",
+    "sql.instances.delete",
+    "sql.users.update",
+    "sql.sslCerts.create",
+    "sql.instances.export",
+]
+
+
+class CloudSQLAuditEvent(BaseModel):
+    """Cloud SQL Admin API audit event."""
+
+    proto_payload: AuditLogPayload = Field(..., alias="protoPayload")
+    timestamp: str | None = None
+    resource: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def method_name(self) -> str:
+        return self.proto_payload.method_name
+
+    @property
+    def service_name(self) -> str:
+        return self.proto_payload.service_name
+
+    @property
+    def resource_name(self) -> str:
+        return self.proto_payload.resource_name
+
+    @property
+    def caller_ip(self) -> str:
+        return self.proto_payload.request.get("callerIp", "")
+
+    @property
+    def severity(self) -> str:
+        return self.resource.get("labels", {}).get("severity", "MEDIUM")
+
+    @property
+    def is_risky(self) -> bool:
+        return any(m in self.proto_payload.method_name for m in RISKY_CLOUDSQL_METHODS)
+
+
+# ---------------------------------------------------------------------------
+# GKE Audit Event Models (Nhóm 2)
+# ---------------------------------------------------------------------------
+
+RISKY_K8S_METHODS: list[str] = [
+    "io.k8s.core.v1.pods.exec",
+    "io.k8s.core.v1.pods.create",
+    "io.k8s.batch.v1.jobs.create",
+]
+
+
+class GKEAuditEvent(BaseModel):
+    """GKE Kubernetes audit log event."""
+
+    proto_payload: AuditLogPayload = Field(..., alias="protoPayload")
+    timestamp: str | None = None
+    resource: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def method_name(self) -> str:
+        return self.proto_payload.method_name
+
+    @property
+    def is_risky(self) -> bool:
+        method = self.proto_payload.method_name
+        return "pods.exec" in method or "pods.attach" in method or "pods.create" in method or "jobs.create" in method
+
+
+# ---------------------------------------------------------------------------
+# Cloud Build Audit Event Models (Nhóm 3)
+# ---------------------------------------------------------------------------
+
+RISKY_CLOUDBUILD_METHODS: list[str] = [
+    "google.devtools.cloudbuild.v1.CloudBuild.CreateBuild",
+    "google.devtools.cloudbuild.v1.CloudBuild.UpdateBuildTrigger",
+    "google.devtools.cloudbuild.v1.CloudBuild.CreateBuildTrigger",
+    "google.devtools.cloudbuild.v1.CloudBuild.DeleteBuildTrigger",
+]
+
+
+class CloudBuildAuditEvent(BaseModel):
+    """Cloud Build audit event."""
+
+    proto_payload: AuditLogPayload = Field(..., alias="protoPayload")
+    timestamp: str | None = None
+    resource: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def method_name(self) -> str:
+        return self.proto_payload.method_name
+
+    @property
+    def service_name(self) -> str:
+        return self.proto_payload.service_name
+
+    @property
+    def is_risky(self) -> bool:
+        return any(m in self.proto_payload.method_name for m in RISKY_CLOUDBUILD_METHODS)

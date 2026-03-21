@@ -98,3 +98,43 @@ class TestAttackForecaster:
         assert count == 2
         count = af.ingest([{"action": "c"}])
         assert count == 3
+
+    # ---- Nhóm 5: Additional tests ----
+
+    def test_probability_accuracy(self, forecaster):
+        """All probability values must be in [0, 100]."""
+        result = forecaster.forecast()
+        attacks = result["top_predicted_attacks"]
+        assert len(attacks) > 0
+        for attack in attacks:
+            assert 0.0 <= attack["probability"] <= 100.0
+
+    def test_escalating_boost(self, forecaster):
+        """When trend is ESCALATING, top attack probability >= base (unescalated) probability."""
+        result = forecaster.forecast()
+        trend = result["trend_analysis"]
+        if trend["direction"] == "ESCALATING":
+            attacks = result["top_predicted_attacks"]
+            top = attacks[0]
+            total = sum(a["historical_count"] for a in attacks)
+            base_probability = top["historical_count"] / total * 100
+            assert top["probability"] >= base_probability
+
+    def test_risk_heatmap_completeness(self, forecaster):
+        """Top resource types from ingested incidents must appear in heatmap."""
+        result = forecaster.forecast()
+        heatmap = result["risk_heatmap"]
+        assert len(heatmap) >= 2
+        assert "ec2" in heatmap
+        assert "iam" in heatmap
+
+    def test_insufficient_data_graceful(self):
+        """< 5 incidents → status == INSUFFICIENT_DATA, no exception raised."""
+        af = AttackForecaster()
+        af.ingest([{"action": "test", "severity": "LOW"}, {"action": "test2", "severity": "HIGH"}])
+        result = af.forecast()
+        assert result["status"] == "INSUFFICIENT_DATA"
+        # Must not raise, and must have safe defaults
+        assert result["top_predicted_attacks"] == []
+        assert result["risk_heatmap"] == {}
+        assert result["proactive_recommendations"] == []

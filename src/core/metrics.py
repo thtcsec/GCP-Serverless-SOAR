@@ -92,3 +92,12 @@ class PlaybookTimer:
         else:
             emit_metric("playbook_failure", 1.0, labels)
         return False
+
+
+def emit_step_metric(playbook_name: str, step_name: str, duration_ms: float) -> None:
+    """Emit per-step timing metric for detailed observability (Nhóm 4)."""
+    try:
+        metric_type = f"{playbook_name.lower()}_{step_name}_duration_ms"
+        emit_metric(metric_type, duration_ms, {"playbook": playbook_name, "step": step_name})
+    except Exception as e:
+        logger.warning(f"Failed to emit step metric {step_name}: {e}")

@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .playbooks.cicd_supply_chain import CICDSupplyChainPlaybook
+from .playbooks.cloudsql_compromise import CloudSQLCompromisePlaybook
 from .playbooks.gce_containment import GCEContainment
+from .playbooks.gke_pod_eviction import GKEPodEvictionPlaybook
 from .playbooks.registry import PlaybookRegistry
 from .playbooks.sa_compromise import SACompromise
 from .playbooks.storage_exfiltration import StorageExfiltration
@@ -24,6 +27,9 @@ registry = PlaybookRegistry()
 registry.register(GCEContainment())
 registry.register(SACompromise())
 registry.register(StorageExfiltration())
+registry.register(CloudSQLCompromisePlaybook())
+registry.register(GKEPodEvictionPlaybook())
+registry.register(CICDSupplyChainPlaybook())
 
 
 # ---------------------------------------------------------------------------
