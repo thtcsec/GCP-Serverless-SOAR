@@ -43,9 +43,8 @@ class RansomwareResponsePlaybook(Playbook):
     def can_handle(self, event_data: dict[str, Any]) -> bool:
         try:
             finding = SCCFinding(**event_data)
-            return (
-                finding.is_high_severity
-                and any(cat.lower() in finding.category.lower() for cat in _RANSOMWARE_CATEGORIES)
+            return finding.is_high_severity and any(
+                cat.lower() in finding.category.lower() for cat in _RANSOMWARE_CATEGORIES
             )
         except Exception:
             return False
