@@ -21,6 +21,11 @@ def get_disks_client() -> compute_v1.DisksClient:
 
 
 @lru_cache(maxsize=1)
+def get_security_policies_client() -> compute_v1.SecurityPoliciesClient:
+    return compute_v1.SecurityPoliciesClient()
+
+
+@lru_cache(maxsize=1)
 def get_snapshots_client() -> compute_v1.SnapshotsClient:
     return compute_v1.SnapshotsClient()
 

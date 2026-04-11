@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .playbooks.api_gateway_abuse import APIGatewayAbusePlaybook
 from .playbooks.gce_containment import GCEContainment
 from .playbooks.registry import PlaybookRegistry
 from .playbooks.sa_compromise import SACompromise
@@ -24,6 +25,7 @@ registry = PlaybookRegistry()
 registry.register(GCEContainment())
 registry.register(SACompromise())
 registry.register(StorageExfiltration())
+registry.register(APIGatewayAbusePlaybook())
 
 
 # ---------------------------------------------------------------------------
