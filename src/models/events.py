@@ -137,6 +137,26 @@ class StorageAuditEvent(BaseModel):
         return any(m in self.proto_payload.method_name for m in self.READ_METHODS)
 
 
+class APIGatewayAuditEvent(BaseModel):
+    """API Gateway specific audit event wrapper."""
+
+    proto_payload: AuditLogPayload = Field(..., alias="protoPayload")
+    timestamp: str | None = None
+    resource: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def client_ip(self) -> str | None:
+        return str(self.proto_payload.request.get("callerIp", "")) or None
+
+    @property
+    def is_ddos_abuse(self) -> bool:
+        # GCP Cloud Armor or API Gateway rate limiting events might have these status codes
+        status = self.proto_payload.status.get("code", 0)
+        return status in (429, 403)
+
+
 # ---------------------------------------------------------------------------
 # Pub/Sub Message Model
 # ---------------------------------------------------------------------------
