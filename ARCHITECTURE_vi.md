@@ -16,10 +16,12 @@ Một khung làm việc **Điều phối Bảo mật** nâng cao với tình bá
     *   **Phê duyệt con người:** Tích hợp Slack/Jira cho quyết định human-in-the-loop.
     *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident` để tương thích đa nền tảng.
     *   **Tương quan sự cố:** Nhóm các cảnh báo liên quan theo IOC chung (IP, tác nhân, ±5 phút) để phát hiện chiến dịch tấn công đa giai đoạn.
-*   **Hệ thống phân cấp cách ly (Function > Process > Permissions > Network):**
+*   **Hệ thống phân cấp cách ly (Function > Process > Container > Permissions > Network):**
     *   **Tầng Process:** Kill các tiến trình độc hại và cách ly file qua Compute Engine metadata script.
+    *   **Tầng Container:** Trục xuất GKE pod nhiễm mã độc và gắn label cách ly mạng.
+    *   **Tầng Database:** Tự động tạo Cloud SQL backup phục vụ pháp y số khi phát hiện dị thường.
     *   **Tầng Permissions:** Thu hồi khóa SA, vô hiệu hóa Service Account, gỡ bỏ IAM bindings.
-    *   **Tầng Network:** Chặn lưu lượng ra qua Firewall rule hoặc network tag (biện pháp cuối cùng).
+    *   **Tầng Network:** Chặn lưu lượng ra GCE qua Firewall rule hoặc network tag (biện pháp cuối cùng).
 
 ## 2. Luồng Phản ứng
 

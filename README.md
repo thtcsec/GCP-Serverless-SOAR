@@ -260,8 +260,6 @@ This will launch an interactive menu allowing you to:
 2. Trigger Cloud Storage Data Exfiltration
 3. Trigger Service Account Compromise
 
-Alternatively, you can run the **Unified MultiCloud Dashboard** from the root of the workspace using Docker Compose. It provides a visual interface to trigger attacks across both AWS and GCP.
-
 ## 🚀 Deployment
 
 We provide a fully automated deployment script for the entire platform.

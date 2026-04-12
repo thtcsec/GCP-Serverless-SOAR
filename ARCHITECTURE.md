@@ -16,10 +16,12 @@ An advanced **Security Orchestration** framework with multi-source intelligence,
     *   **Human Approval:** Slack/Jira integration for human-in-the-loop decisions.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
-*   **Containment Hierarchy (Function > Process > Permissions > Network):**
+*   **Containment Hierarchy (Function > Process > Container > Permission > Network):**
     *   **Process-Level:** Kill malicious processes and quarantine files via Compute Engine metadata scripts.
+    *   **Container-Level:** Evict compromised GKE pods and apply quarantine network labels.
+    *   **Database-Level:** Initiate Cloud SQL forensic backups upon suspicious activity detection.
     *   **Permissions-Level:** Revoke SA keys, disable Service Account, remove IAM bindings.
-    *   **Network-Level:** Block egress traffic via Firewall rules or network tags (last resort).
+    *   **Network-Level:** Block GCE egress traffic via Firewall rules or network tags (last resort).
 
 ## 2. Response Flow
 
