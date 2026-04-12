@@ -256,10 +256,11 @@ docker compose run --rm attacker
 ```
 
 This will launch an interactive menu allowing you to:
-1. Trigger the GCE Crypto Miner
+1. Trigger the GCE Crypto Miner / Ransomware
 2. Trigger Cloud Storage Data Exfiltration
 3. Trigger Service Account Compromise
-- `containers/`: Cloud Run forensic worker configuration.
+
+Alternatively, you can run the **Unified MultiCloud Dashboard** from the root of the workspace using Docker Compose. It provides a visual interface to trigger attacks across both AWS and GCP.
 
 ## 🚀 Deployment
 
@@ -300,9 +301,11 @@ echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-f
 
 | Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
 |-------------|-----------|---------------|---------------|-------------------|
-| GCE Compromise | SCC | < 30s | Scoring Engine | Workflow approval, container forensics |
-| Storage Exfiltration | Audit Logs | < 60s | Scoring Engine | Multi-Intel enrichment, SIEM integration |
+| GCE Ransomware/Compromise | SCC | < 30s | Scoring Engine | Workflow approval, Snapshot, Isolate |
+| Storage Exfiltration | Audit Logs | < 60s | Scoring Engine | Versioning, Block Public Access |
 | SA Compromise | Audit Logs | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
+| GKE Pod Compromise | SCC | < 20s | Scoring Engine | Pod Eviction, Quarantine Labels |
+| Cloud SQL Abuse | Audit Logs | < 30s | Scoring Engine | Forensic backup, ticketing |
 | DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
 
 ## 🔧 Configuration

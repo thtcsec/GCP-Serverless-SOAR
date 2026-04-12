@@ -15,6 +15,8 @@ from .playbooks.ransomware_response import RansomwareResponsePlaybook
 from .playbooks.registry import PlaybookRegistry
 from .playbooks.sa_compromise import SACompromise
 from .playbooks.storage_exfiltration import StorageExfiltration
+from .playbooks.gke_pod_isolation import GKEPodIsolationPlaybook
+from .playbooks.cloudsql_compromise import CloudSQLCompromisePlaybook
 
 logger = logging.getLogger("gcp-soar.handlers")
 
@@ -28,6 +30,8 @@ registry.register(SACompromise())
 registry.register(StorageExfiltration())
 registry.register(APIGatewayAbusePlaybook())
 registry.register(RansomwareResponsePlaybook())
+registry.register(GKEPodIsolationPlaybook())
+registry.register(CloudSQLCompromisePlaybook())
 
 
 # ---------------------------------------------------------------------------
