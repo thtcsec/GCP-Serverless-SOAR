@@ -44,7 +44,7 @@ class SACompromise:
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("SACompromise"):
             evt = IAMAuditEvent(**event_data)
             payload = evt.proto_payload
@@ -56,6 +56,9 @@ class SACompromise:
 
             caller_ip = payload.request.get("callerIp", "")
             action = payload.method_name
+
+            if self._is_dry_run(event_data):
+                return self._build_preview(sa_email, action, caller_ip)
 
             intel_report = {}
             risk_data = {"decision": "IGNORE", "risk_score": 0.0}
@@ -115,6 +118,47 @@ class SACompromise:
                     return False
 
             return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(sa_email: str, action: str, caller_ip: str) -> dict[str, Any]:
+        return {
+            "mode": "dry_run",
+            "playbook": "SACompromise",
+            "target_resource": sa_email,
+            "summary": "Preview only. No service account keys, IAM bindings, or alerts were changed.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "risk_assessment",
+                    "target": sa_email,
+                    "details": f"Evaluate risky IAM method '{action}' from caller IP '{caller_ip or 'unknown'}'.",
+                },
+                {
+                    "step": 2,
+                    "action": "disable_service_account_keys",
+                    "target": sa_email,
+                    "details": "Disable user-managed service account keys if decision reaches AUTO_ISOLATE.",
+                },
+                {
+                    "step": 3,
+                    "action": "remove_critical_roles",
+                    "target": sa_email,
+                    "details": "Remove critical project-level IAM roles bound to the service account.",
+                },
+                {
+                    "step": 4,
+                    "action": "publish_alert",
+                    "target": sa_email,
+                    "details": "Publish incident alert and notify Slack for operator review.",
+                },
+            ],
+        }
 
     # ------------------------------------------------------------------ #
 

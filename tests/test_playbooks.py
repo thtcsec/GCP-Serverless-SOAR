@@ -301,6 +301,36 @@ class TestSACompromisePlaybook:
         assert not mock_alert.called
         assert mock_slack.called
 
+    @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
+    @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
+    @patch("src.playbooks.sa_compromise.SACompromise._remove_critical_roles")
+    @patch("src.playbooks.sa_compromise.SACompromise._disable_keys")
+    @patch("src.playbooks.sa_compromise.PlaybookTimer")
+    def test_execute_dry_run_preview(
+        self,
+        mock_timer,
+        mock_disable,
+        mock_remove,
+        mock_alert,
+        mock_slack,
+        playbook,
+        valid_iam_event,
+    ):
+        """Test dry-run preview skips SA remediation"""
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        valid_iam_event["dry_run"] = True
+
+        result = playbook.execute(valid_iam_event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "SACompromise"
+        assert len(result["planned_actions"]) == 4
+        assert not mock_disable.called
+        assert not mock_remove.called
+        assert not mock_alert.called
+        assert not mock_slack.called
+
 
 class TestStorageExfiltrationPlaybook:
     """Test Storage Exfiltration Playbook"""

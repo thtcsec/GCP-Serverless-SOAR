@@ -88,9 +88,7 @@ class GCEContainment:
     @staticmethod
     def _is_dry_run(event_data: dict[str, Any]) -> bool:
         return bool(
-            event_data.get("dry_run")
-            or event_data.get("preview_only")
-            or event_data.get("execution_mode") == "dry_run"
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
         )
 
     @staticmethod
