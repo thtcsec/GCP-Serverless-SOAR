@@ -16,6 +16,6 @@ class Playbook(Protocol):
         """Return True when this playbook knows how to process *event_data*."""
         ...
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         """Run the full response flow. Return True on success."""
         ...

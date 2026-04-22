@@ -23,7 +23,7 @@ class PlaybookRegistry:
         self._playbooks.append(playbook)
         logger.info(f"Registered playbook: {playbook.__class__.__name__}")
 
-    def dispatch(self, event_data: dict[str, Any]) -> bool | None:
+    def dispatch(self, event_data: dict[str, Any]) -> bool | dict[str, Any] | None:
         """Find the first playbook that can handle the event and execute it."""
         for playbook in self._playbooks:
             if playbook.can_handle(event_data):

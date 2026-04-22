@@ -53,6 +53,9 @@ def handle_event(event_data: dict[str, Any]) -> dict[str, Any]:
         logger.warning("Event was not handled by any playbook")
         return {"statusCode": 200, "body": "No matching playbook"}
 
+    if isinstance(result, dict):
+        return {"statusCode": 200, "body": result}
+
     if result:
         return {"statusCode": 200, "body": "Playbook executed successfully"}
 

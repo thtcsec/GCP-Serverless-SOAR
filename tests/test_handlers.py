@@ -45,6 +45,21 @@ class TestHandlers:
         assert "failed" in result["body"]
 
     @patch("src.handlers.registry")
+    def test_handle_event_dry_run_preview(self, mock_registry):
+        """Test dry-run preview response"""
+        mock_registry.dispatch.return_value = {
+            "mode": "dry_run",
+            "playbook": "GCEContainment",
+            "planned_actions": [],
+        }
+
+        result = handle_event({"dry_run": True})
+
+        assert result["statusCode"] == 200
+        assert result["body"]["mode"] == "dry_run"
+        assert result["body"]["playbook"] == "GCEContainment"
+
+    @patch("src.handlers.registry")
     def test_handle_event_with_scc_finding(self, mock_registry):
         """Test handling SCC finding event"""
         mock_registry.dispatch.return_value = True

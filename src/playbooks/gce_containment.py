@@ -40,7 +40,7 @@ class GCEContainment:
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("GCEContainment"):
             finding = SCCFinding(**event_data)
             project_id, zone, instance_name = self._parse_resource(finding.resource_name)
@@ -48,6 +48,9 @@ class GCEContainment:
             if not instance_name:
                 logger.error("Cannot extract instance details from resource name")
                 return False
+
+            if self._is_dry_run(event_data):
+                return self._build_preview(project_id, zone, instance_name, finding.category)
 
             logger.info(
                 f"Executing GCE containment for {instance_name}",
@@ -81,6 +84,59 @@ class GCEContainment:
             return parts[4], parts[6], parts[8]
         except IndexError:
             return None, None, None
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run")
+            or event_data.get("preview_only")
+            or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(project_id: str, zone: str, instance_name: str, category: str) -> dict[str, Any]:
+        planned_actions = [
+            {
+                "step": 1,
+                "action": "set_tags",
+                "target": instance_name,
+                "details": f"Apply isolation tag '{config.isolation_tag}' in project {project_id}.",
+            },
+            {
+                "step": 2,
+                "action": "set_service_account",
+                "target": instance_name,
+                "details": "Detach the active service account from the VM.",
+            },
+            {
+                "step": 3,
+                "action": "set_metadata",
+                "target": instance_name,
+                "details": "Set block-project-ssh-keys=TRUE on instance metadata.",
+            },
+            {
+                "step": 4,
+                "action": "create_snapshot",
+                "target": instance_name,
+                "details": f"Create a forensic boot disk snapshot for category '{category}'.",
+            },
+            {
+                "step": 5,
+                "action": "stop",
+                "target": instance_name,
+                "details": f"Stop instance {instance_name} in zone {zone}.",
+            },
+        ]
+        logger.info(f"Dry-run preview generated for GCE containment on {instance_name}")
+        return {
+            "mode": "dry_run",
+            "playbook": "GCEContainment",
+            "target_resource": instance_name,
+            "project_id": project_id,
+            "zone": zone,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No GCP remediation APIs were executed.",
+        }
 
     @staticmethod
     def _isolate_instance(project_id: str, zone: str, instance_name: str) -> None:

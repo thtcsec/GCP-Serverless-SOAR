@@ -92,6 +92,18 @@ class TestGCEContainmentPlaybook:
         assert mock_instances.set_tags.called
         assert mock_instances.stop.called
 
+    @patch("src.playbooks.gce_containment.get_instances_client")
+    def test_execute_dry_run_preview(self, mock_get_instances, playbook, valid_scc_finding):
+        """Test dry-run preview skips GCP API calls"""
+        valid_scc_finding["dry_run"] = True
+
+        result = playbook.execute(valid_scc_finding)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "GCEContainment"
+        assert len(result["planned_actions"]) == 5
+        assert not mock_get_instances.called
+
 
 class TestSACompromisePlaybook:
     """Test Service Account Compromise Playbook"""
