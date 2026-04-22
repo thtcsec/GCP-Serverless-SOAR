@@ -19,6 +19,9 @@ class TestScoringEngine:
         assert result["breakdown"]["vt_malicious"] == 15
         assert result["breakdown"]["abuse_confidence"] == 90
         assert result["breakdown"]["initial_severity"] == 9.0
+        assert "mapped to AUTO_ISOLATE" in result["decision_rationale"]
+        assert "severity=9.0" in result["summary"]
+        assert result["recommended_action"] == "Isolate resource immediately and preserve forensic evidence."
 
     def test_calculate_risk_score_require_approval(self):
         engine = ScoringEngine()
@@ -41,6 +44,7 @@ class TestScoringEngine:
 
         assert result["risk_score"] == 11.0
         assert result["decision"] == "IGNORE"
+        assert result["recommended_action"] == "Record the event and continue monitoring for escalation."
 
     def test_calculate_risk_score_missing_data(self):
         engine = ScoringEngine()
@@ -51,3 +55,4 @@ class TestScoringEngine:
 
         assert result["risk_score"] == 0.0
         assert result["decision"] == "IGNORE"
+        assert "mapped to IGNORE" in result["decision_rationale"]

@@ -233,6 +233,7 @@ def send_slack_alert(
         score_fields = [
             {"type": "mrkdwn", "text": f"*Risk Score:*\n{risk_data['risk_score']}/100"},
             {"type": "mrkdwn", "text": f"*Decision:*\n{risk_data['decision']}"},
+            {"type": "mrkdwn", "text": f"*Decision Summary:*\n{risk_data.get('summary', 'N/A')}"},
             {
                 "type": "mrkdwn",
                 "text": f"*VT Malicious:*\n{risk_data['breakdown'].get('vt_malicious', 0)}",
