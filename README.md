@@ -287,6 +287,9 @@ terraform/
 git clone https://github.com/thtcsec/GCP-Serverless-SOAR.git
 cd GCP-Serverless-SOAR
 
+# Optional: quick local diagnostics on Windows / PowerShell
+.\scripts\doctor.ps1
+
 # 2. Run the deployment script (deploys Terraform, builds Cloud Run containers, sets up Secrets)
 ./scripts/deploy.sh prod deploy
 
@@ -312,6 +315,7 @@ echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-f
 A `.env.example` file is provided in the repository root documenting all OS environment variables used by the playbooks.
 - For local testing, copy this file to `.env` and adjust the values.
 - In production, these parameters are securely injected into the Cloud Functions runtime by Terraform.
+- On Windows, run `.\scripts\doctor.ps1` for a quick readiness check of `.venv`, gcloud auth, Terraform, Docker, and next-step commands.
 
 ### Variables
 - `worker_desired_count`: Container worker instances (prod: 3, dev: 1)
