@@ -42,7 +42,7 @@ class GKEPodIsolationPlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("GKEPodIsolation"):
             try:
                 finding = SCCFinding(**event_data)
@@ -61,6 +61,11 @@ class GKEPodIsolationPlaybook(Playbook):
                 if not pod_name:
                     logger.warning("No pod name found in finding; cannot isolate specific pod.")
                     return False
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(
+                        cluster_name, namespace_name, pod_name, finding.category, finding.severity
+                    )
 
                 logger.info(f"Executing GKE Pod Isolation for cluster={cluster_name}, pod={pod_name}")
                 self.audit.log(
@@ -112,6 +117,54 @@ class GKEPodIsolationPlaybook(Playbook):
         elif severity == "MEDIUM":
             return "REQUIRE_APPROVAL"
         return "IGNORE"
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(
+        cluster_name: str,
+        namespace: str,
+        pod_name: str,
+        category: str,
+        severity: str,
+    ) -> dict[str, Any]:
+        decision = GKEPodIsolationPlaybook._severity_decision(severity)
+        planned_actions = [
+            {
+                "step": 1,
+                "action": "severity_decision",
+                "target": cluster_name,
+                "details": f"Map severity '{severity}' to decision '{decision}' for category '{category}'.",
+            },
+            {
+                "step": 2,
+                "action": "patch_namespaced_pod",
+                "target": f"{cluster_name}/{namespace}/{pod_name}",
+                "details": "Apply soar-quarantine=true label to isolate the pod.",
+            },
+        ]
+        if decision == "AUTO_ISOLATE":
+            planned_actions.append(
+                {
+                    "step": 3,
+                    "action": "create_namespaced_pod_eviction",
+                    "target": f"{cluster_name}/{namespace}/{pod_name}",
+                    "details": "Evict the compromised pod from the cluster.",
+                }
+            )
+
+        return {
+            "mode": "dry_run",
+            "playbook": "GKEPodIsolation",
+            "target_resource": f"{cluster_name}/{namespace}/{pod_name}",
+            "decision": decision,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No Kubernetes remediation APIs were executed.",
+        }
 
     def _get_k8s_client(self):
         """Load internal k8s client config."""

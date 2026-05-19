@@ -371,6 +371,20 @@ class TestStorageExfiltrationPlaybook:
         """Test playbook rejects malformed events"""
         assert playbook.can_handle({"invalid": "data"}) is False
 
+    @patch("src.playbooks.storage_exfiltration.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer, playbook, valid_storage_event):
+        """Test dry-run preview skips storage remediation"""
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        valid_storage_event["dry_run"] = True
+
+        result = playbook.execute(valid_storage_event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "StorageExfiltration"
+        assert result["target_resource"] == "test-bucket"
+        assert len(result["planned_actions"]) == 4
+
 
 class TestPlaybookIntegration:
     """Integration tests for playbook registry"""
@@ -425,3 +439,72 @@ class TestPlaybookIntegration:
         unhandled_event = {"unknown": "event"}
         result = registry.dispatch(unhandled_event)
         assert result is None
+
+
+class TestGKEPodIsolationDryRun:
+    @pytest.fixture
+    def playbook(self):
+        from src.playbooks.gke_pod_isolation import GKEPodIsolationPlaybook
+
+        return GKEPodIsolationPlaybook()
+
+    @pytest.fixture
+    def valid_gke_event(self):
+        return {
+            "name": "gke-finding",
+            "category": "Execution: Malicious binary",
+            "severity": "HIGH",
+            "resourceName": "//container.googleapis.com/projects/test/locations/us-central1/clusters/my-cluster",
+            "state": "ACTIVE",
+            "resource": {"name": "my-cluster", "type": "google.container.Cluster"},
+            "sourceProperties": {
+                "cluster_name": "my-cluster",
+                "namespace": "default",
+                "pod": "compromised-pod",
+            },
+        }
+
+    @patch("src.playbooks.gke_pod_isolation.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer, playbook, valid_gke_event):
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        valid_gke_event["dry_run"] = True
+
+        result = playbook.execute(valid_gke_event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "GKEPodIsolation"
+        assert result["decision"] == "AUTO_ISOLATE"
+        assert len(result["planned_actions"]) == 3
+
+
+class TestCloudSQLCompromiseDryRun:
+    @pytest.fixture
+    def playbook(self):
+        from src.playbooks.cloudsql_compromise import CloudSQLCompromisePlaybook
+
+        return CloudSQLCompromisePlaybook()
+
+    @pytest.fixture
+    def valid_sql_event(self):
+        return {
+            "name": "sql-finding",
+            "category": "SQL Injection",
+            "severity": "HIGH",
+            "resourceName": "//cloudsql.googleapis.com/projects/test/instances/my-db",
+            "state": "ACTIVE",
+            "resource": {"name": "my-db", "type": "google.cloudsql.DatabaseInstance"},
+        }
+
+    @patch("src.playbooks.cloudsql_compromise.PlaybookTimer")
+    def test_execute_dry_run_preview(self, mock_timer, playbook, valid_sql_event):
+        mock_timer.return_value.__enter__ = MagicMock()
+        mock_timer.return_value.__exit__ = MagicMock(return_value=False)
+        valid_sql_event["dry_run"] = True
+
+        result = playbook.execute(valid_sql_event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "CloudSQLCompromise"
+        assert result["target_resource"] == "my-db"
+        assert len(result["planned_actions"]) == 2

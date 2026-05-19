@@ -29,7 +29,7 @@ class StorageExfiltration:
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("StorageExfiltration"):
             evt = StorageAuditEvent(**event_data)
             payload = evt.proto_payload
@@ -41,6 +41,10 @@ class StorageExfiltration:
 
             principal = payload.authentication_info.principal_email
             caller_ip = payload.request.get("callerIp", "")
+
+            if self._is_dry_run(event_data):
+                return self._build_preview(bucket_name, principal, caller_ip, payload.method_name)
+
             analysis = self._analyse_patterns(principal, bucket_name)
 
             if not analysis["is_exfiltration"]:
@@ -71,6 +75,49 @@ class StorageExfiltration:
         if "projects/_/buckets/" in resource_name:
             return resource_name.split("projects/_/buckets/")[1].split("/")[0]
         return None
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(bucket_name: str, principal: str, caller_ip: str, method_name: str) -> dict[str, Any]:
+        return {
+            "mode": "dry_run",
+            "playbook": "StorageExfiltration",
+            "target_resource": bucket_name,
+            "summary": "Preview only. No Cloud Storage IAM or protection settings were changed.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "analyse_patterns",
+                    "target": bucket_name,
+                    "details": (
+                        f"Analyse read patterns for {principal} via {method_name} from {caller_ip or 'unknown'}."
+                    ),
+                },
+                {
+                    "step": 2,
+                    "action": "remove_iam_member",
+                    "target": bucket_name,
+                    "details": f"Remove {principal} from bucket IAM if exfiltration is confirmed.",
+                },
+                {
+                    "step": 3,
+                    "action": "enable_protections",
+                    "target": bucket_name,
+                    "details": "Enable versioning, retention, and uniform bucket-level access.",
+                },
+                {
+                    "step": 4,
+                    "action": "create_forensic_copy",
+                    "target": bucket_name,
+                    "details": "Save forensic metadata to the configured forensic bucket.",
+                },
+            ],
+        }
 
     def _analyse_patterns(self, principal: str, bucket_name: str) -> dict[str, Any]:
         analysis: dict[str, Any] = {

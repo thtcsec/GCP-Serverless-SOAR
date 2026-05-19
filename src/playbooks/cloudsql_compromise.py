@@ -43,7 +43,7 @@ class CloudSQLCompromisePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         with PlaybookTimer("CloudSQLCompromise"):
             try:
                 db_id = "unknown"
@@ -61,6 +61,9 @@ class CloudSQLCompromisePlaybook(Playbook):
                     audit = IAMAuditEvent(**event_data)
                     db_id = audit.proto_payload.resource_name.split("/")[-1]
                     event_name = audit.proto_payload.method_name
+
+                if self._is_dry_run(event_data):
+                    return self._build_preview(project_id, db_id, event_name, severity)
 
                 logger.info(f"Executing Cloud SQL Compromise playbook for {db_id} (action={event_name})")
                 self.audit.log(AuditAction.PLAYBOOK_STARTED, db_id, actor="GCP_SOAR", details={"event": event_name})
@@ -92,12 +95,12 @@ class CloudSQLCompromisePlaybook(Playbook):
         parts = resource_name.split("/")
         project_id = ""
         db_id = resource_name
-        if len(parts) >= 8 and "projects" in parts:
+        if "projects" in parts:
             try:
                 p_idx = parts.index("projects")
                 project_id = parts[p_idx + 1]
-                db_id = parts[-1]
-            except ValueError:
+                db_id = parts[parts.index("instances") + 1] if "instances" in parts else parts[-1]
+            except (ValueError, IndexError):
                 pass
         return project_id, db_id
 
@@ -108,6 +111,38 @@ class CloudSQLCompromisePlaybook(Playbook):
         elif severity == "MEDIUM":
             return "REQUIRE_APPROVAL"
         return "IGNORE"
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    @staticmethod
+    def _build_preview(project_id: str, db_id: str, event_name: str, severity: str) -> dict[str, Any]:
+        decision = CloudSQLCompromisePlaybook._severity_decision(severity)
+        return {
+            "mode": "dry_run",
+            "playbook": "CloudSQLCompromise",
+            "target_resource": db_id,
+            "project_id": project_id,
+            "decision": decision,
+            "summary": "Preview only. No Cloud SQL backups or network settings were changed.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "severity_decision",
+                    "target": db_id,
+                    "details": f"Map severity '{severity}' to decision '{decision}' for event '{event_name}'.",
+                },
+                {
+                    "step": 2,
+                    "action": "backupRuns.insert",
+                    "target": db_id,
+                    "details": f"Create on-demand forensic backup in project {project_id or 'unknown'}.",
+                },
+            ],
+        }
 
     def _create_db_backup(self, project_id: str, db_id: str) -> None:
         """Create an on-demand SQL backup."""

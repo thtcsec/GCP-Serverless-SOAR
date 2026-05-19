@@ -43,7 +43,7 @@ class APIGatewayAbusePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         try:
             event = APIGatewayAuditEvent.model_validate(event_data)
             client_ip = event.client_ip
@@ -51,6 +51,9 @@ class APIGatewayAbusePlaybook(Playbook):
             if not client_ip:
                 logger.error("No client IP found in APIGateway finding")
                 return False
+
+            if self._is_dry_run(event_data):
+                return self._build_preview(client_ip)
 
             logger.info(f"Executing API Gateway Abuse Playbook for IP={client_ip}")
             self.audit.log(
@@ -75,6 +78,35 @@ class APIGatewayAbusePlaybook(Playbook):
             with contextlib.suppress(Exception):
                 self.audit.log(AuditAction.PLAYBOOK_FAILED, "cloud_armor", actor="GCP_SOAR", success=False)
             return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, client_ip: str) -> dict[str, Any]:
+        target_ip = f"{client_ip}/32" if ":" not in client_ip else f"{client_ip}/128"
+        return {
+            "mode": "dry_run",
+            "playbook": "APIGatewayAbuse",
+            "target_resource": client_ip,
+            "summary": "Preview only. No Cloud Armor deny rules were added.",
+            "planned_actions": [
+                {
+                    "step": 1,
+                    "action": "get_security_policy",
+                    "target": self.policy_name or "UNCONFIGURED",
+                    "details": f"Fetch Cloud Armor policy in project {self.project_id or 'UNCONFIGURED'}.",
+                },
+                {
+                    "step": 2,
+                    "action": "add_rule",
+                    "target": target_ip,
+                    "details": f"Add deny(403) rule for {target_ip} at priority {self.priority}.",
+                },
+            ],
+        }
 
     def _block_ip(self, target_ip: str) -> None:
         """Add a deny rule to Cloud Armor Security Policy."""

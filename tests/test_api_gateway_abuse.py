@@ -62,3 +62,14 @@ def test_execute_no_config(gcp_abuse_event):
     playbook = APIGatewayAbusePlaybook()
     result = playbook.execute(gcp_abuse_event)
     assert result is False
+
+
+def test_execute_dry_run_preview(gcp_abuse_event):
+    gcp_abuse_event["dry_run"] = True
+    playbook = APIGatewayAbusePlaybook()
+    result = playbook.execute(gcp_abuse_event)
+
+    assert result["mode"] == "dry_run"
+    assert result["playbook"] == "APIGatewayAbuse"
+    assert result["target_resource"] == "203.0.113.5"
+    assert len(result["planned_actions"]) == 2

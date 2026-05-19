@@ -157,3 +157,26 @@ class TestEdgeCases:
         ):
             pb = RansomwareResponsePlaybook()
             assert pb.execute(_make_compute_finding()) is False
+
+
+class TestRansomwareDryRun:
+    def test_execute_dry_run_preview_compute(self):
+        event = _make_compute_finding()
+        event["dry_run"] = True
+
+        pb = RansomwareResponsePlaybook()
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert result["playbook"] == "RansomwareResponse"
+        assert len(result["planned_actions"]) == 3
+
+    def test_execute_dry_run_preview_storage(self):
+        event = _make_storage_finding()
+        event["dry_run"] = True
+
+        pb = RansomwareResponsePlaybook()
+        result = pb.execute(event)
+
+        assert result["mode"] == "dry_run"
+        assert len(result["planned_actions"]) == 2

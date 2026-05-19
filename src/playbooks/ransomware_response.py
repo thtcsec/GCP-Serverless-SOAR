@@ -49,9 +49,13 @@ class RansomwareResponsePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool:
+    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
         try:
             finding = SCCFinding(**event_data)
+
+            if self._is_dry_run(event_data):
+                return self._build_preview(finding)
+
             audit = AuditLogger()
 
             logger.info(
@@ -87,6 +91,74 @@ class RansomwareResponsePlaybook(Playbook):
                     success=False,
                 )
             return False
+
+    @staticmethod
+    def _is_dry_run(event_data: dict[str, Any]) -> bool:
+        return bool(
+            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
+        )
+
+    def _build_preview(self, finding: SCCFinding) -> dict[str, Any]:
+        planned_actions: list[dict[str, Any]] = []
+        step = 1
+        target = finding.name
+
+        if finding.is_compute_resource:
+            project, zone, instance = self._parse_resource(finding.resource_name)
+            if instance:
+                target = instance
+                planned_actions.extend(
+                    [
+                        {
+                            "step": step,
+                            "action": "create_snapshot",
+                            "target": instance,
+                            "details": f"Snapshot all disks for instance in {project}/{zone}.",
+                        },
+                        {
+                            "step": step + 1,
+                            "action": "set_tags",
+                            "target": instance,
+                            "details": f"Apply isolation tag '{config.isolation_tag}'.",
+                        },
+                        {
+                            "step": step + 2,
+                            "action": "stop",
+                            "target": instance,
+                            "details": "Stop the instance to prevent lateral movement.",
+                        },
+                    ]
+                )
+                step += 3
+
+        bucket_name = self._extract_bucket_name(finding)
+        if bucket_name:
+            target = bucket_name
+            planned_actions.extend(
+                [
+                    {
+                        "step": step,
+                        "action": "enable_versioning",
+                        "target": bucket_name,
+                        "details": "Enable Cloud Storage object versioning.",
+                    },
+                    {
+                        "step": step + 1,
+                        "action": "remove_public_access",
+                        "target": bucket_name,
+                        "details": "Remove allUsers and allAuthenticatedUsers IAM bindings.",
+                    },
+                ]
+            )
+
+        return {
+            "mode": "dry_run",
+            "playbook": "RansomwareResponse",
+            "target_resource": target,
+            "category": finding.category,
+            "planned_actions": planned_actions,
+            "summary": "Preview only. No GCE or Cloud Storage remediation APIs were executed.",
+        }
 
     # ------------------------------------------------------------------ #
     # Resource helpers
