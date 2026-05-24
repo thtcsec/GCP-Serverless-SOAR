@@ -6,10 +6,15 @@ Handles GKE runtime threat findings from Security Command Center (Container Thre
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
+import os
+from datetime import UTC, datetime
 from typing import Any
 
+from src.clients.gcp import get_storage_client
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.config import config
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import SCCFinding
 from src.playbooks.base import Playbook
@@ -91,6 +96,7 @@ class GKEPodIsolationPlaybook(Playbook):
                     return True
 
                 if decision in ("AUTO_ISOLATE", "REQUIRE_APPROVAL"):
+                    self._collect_pod_evidence(cluster_name, namespace_name, pod_name, finding.name)
                     self._apply_quarantine_label(cluster_name, namespace_name, pod_name)
                     if decision == "AUTO_ISOLATE":
                         self._evict_pod(cluster_name, namespace_name, pod_name)
@@ -177,6 +183,111 @@ class GKEPodIsolationPlaybook(Playbook):
             # Fallback to kubeconfig (useful for local testing with simulator)
             config.load_kube_config()
         return client
+
+    @staticmethod
+    def _safe_key_component(value: str) -> str:
+        return value.replace("/", "_").replace(":", "_")
+
+    def _collect_pod_evidence(self, cluster_name: str, namespace: str, pod_name: str, finding_name: str) -> None:
+        if not config.forensic_bucket:
+            logger.warning("FORENSIC_BUCKET not configured — skipping pod evidence collection")
+            return
+
+        try:
+            client = self._get_k8s_client()
+            v1 = client.CoreV1Api()
+
+            log_tail = int(os.environ.get("GKE_POD_LOG_TAIL", "2000"))
+            log_since = int(os.environ.get("GKE_POD_LOG_SINCE_SECONDS", "3600"))
+            log_timeout = int(os.environ.get("GKE_POD_LOG_TIMEOUT", "60"))
+            include_previous = os.environ.get("GKE_POD_LOG_PREVIOUS", "false").lower() in ("1", "true", "yes")
+
+            artifacts: dict[str, str] = {}
+            errors: dict[str, str] = {}
+            evidence: dict[str, Any] = {
+                "cluster_name": cluster_name,
+                "namespace": namespace,
+                "pod_name": pod_name,
+                "finding_name": finding_name,
+                "collected_at": datetime.now(UTC).isoformat(),
+                "log_tail": log_tail,
+                "log_since_seconds": log_since,
+                "include_previous": include_previous,
+                "artifacts": artifacts,
+                "errors": errors,
+            }
+
+            safe_finding = self._safe_key_component(finding_name) or datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+            key_prefix = f"evidence/gke/{cluster_name}/{namespace}/{pod_name}/{safe_finding}"
+            bucket = get_storage_client().bucket(config.forensic_bucket)
+
+            def upload_text(key: str, payload: str, content_type: str) -> None:
+                blob = bucket.blob(key)
+                blob.upload_from_string(payload, content_type=content_type)
+
+            try:
+                logs_output = v1.read_namespaced_pod_log(
+                    name=pod_name,
+                    namespace=namespace,
+                    tail_lines=log_tail,
+                    since_seconds=log_since if log_since > 0 else None,
+                    _request_timeout=log_timeout,
+                )
+                if logs_output:
+                    log_key = f"{key_prefix}.log"
+                    upload_text(log_key, logs_output, "text/plain")
+                    artifacts["logs"] = log_key
+            except Exception as exc:
+                errors["logs"] = str(exc)
+
+            if include_previous:
+                try:
+                    prev_output = v1.read_namespaced_pod_log(
+                        name=pod_name,
+                        namespace=namespace,
+                        tail_lines=log_tail,
+                        since_seconds=log_since if log_since > 0 else None,
+                        previous=True,
+                        _request_timeout=log_timeout,
+                    )
+                    if prev_output:
+                        prev_key = f"{key_prefix}.previous.log"
+                        upload_text(prev_key, prev_output, "text/plain")
+                        artifacts["previous_logs"] = prev_key
+                except Exception as exc:
+                    errors["previous_logs"] = str(exc)
+
+            try:
+                pod_obj = v1.read_namespaced_pod(name=pod_name, namespace=namespace)
+                describe_key = f"{key_prefix}.describe.json"
+                upload_text(describe_key, json.dumps(pod_obj.to_dict(), indent=2), "application/json")
+                artifacts["describe"] = describe_key
+            except Exception as exc:
+                errors["describe"] = str(exc)
+
+            try:
+                events = v1.list_namespaced_event(
+                    namespace=namespace,
+                    field_selector=f"involvedObject.name={pod_name},involvedObject.kind=Pod",
+                )
+                events_key = f"{key_prefix}.events.json"
+                payload = json.dumps([event.to_dict() for event in events.items], indent=2)
+                upload_text(events_key, payload, "application/json")
+                artifacts["events"] = events_key
+            except Exception as exc:
+                errors["events"] = str(exc)
+
+            meta_key = f"{key_prefix}.json"
+            upload_text(meta_key, json.dumps(evidence), "application/json")
+
+            self.audit.log(
+                AuditAction.COLLECT_POD_LOGS,
+                f"{cluster_name}/{namespace}/{pod_name}",
+                actor="GCP_SOAR",
+                details={"gcs_key": meta_key, "artifacts": evidence.get("artifacts", {})},
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to collect GKE pod evidence for {pod_name}: {exc}")
 
     def _apply_quarantine_label(self, cluster_name: str, namespace: str, pod_name: str) -> None:
         """Label pod with soar-quarantine=true to isolate it from services."""
