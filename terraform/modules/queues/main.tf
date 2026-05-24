@@ -16,7 +16,7 @@ terraform {
 # ==========================================
 resource "google_pubsub_topic" "security_events" {
   name = "${var.environment}-soar-security-events"
-  
+
   labels = merge(
     var.labels,
     {
@@ -33,7 +33,7 @@ resource "google_pubsub_topic" "security_events" {
 # ==========================================
 resource "google_pubsub_topic" "security_events_dlq" {
   name = "${var.environment}-soar-security-events-dlq"
-  
+
   labels = merge(
     var.labels,
     {
@@ -102,7 +102,7 @@ resource "google_cloud_run_service" "message_processor" {
     spec {
       containers {
         image = var.message_processor_image
-        
+
         resources {
           limits = {
             cpu    = "1000m"
@@ -121,7 +121,7 @@ resource "google_cloud_run_service" "message_processor" {
         }
 
         env {
-          name = "WORKFLOW_EXECUTION_SERVICE_URL"
+          name  = "WORKFLOW_EXECUTION_SERVICE_URL"
           value = "https://workflowexecutions.googleapis.com/v1"
         }
 
@@ -137,7 +137,7 @@ resource "google_cloud_run_service" "message_processor" {
   }
 
   traffic {
-    percent = 100
+    percent         = 100
     latest_revision = true
   }
 }
@@ -185,7 +185,7 @@ resource "google_pubsub_subscription" "security_events_push" {
     push_endpoint = google_cloud_run_service.message_processor.status[0].url
     oidc_token {
       service_account_email = google_service_account.message_processor_sa.email
-      audience             = google_cloud_run_service.message_processor.status[0].url
+      audience              = google_cloud_run_service.message_processor.status[0].url
     }
     attributes = {
       "x-goog-version" = "v1"

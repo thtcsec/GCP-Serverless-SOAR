@@ -5,9 +5,10 @@ Detects and responds to Cloud Storage data-exfiltration patterns.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..clients.gcp import get_publisher, get_storage_client
@@ -154,8 +155,61 @@ class StorageExfiltration:
 
     @staticmethod
     def _get_recent_logs(principal: str, bucket_name: str, hours: int = 24) -> list[dict]:
-        """Placeholder — in production this queries Cloud Logging."""
-        return []
+        """Query Cloud Logging for recent storage access entries."""
+        try:
+            from google.cloud import logging as gcp_logging
+
+            client = gcp_logging.Client(project=config.project_id or None)
+            start_time = datetime.now(UTC) - timedelta(hours=hours)
+
+            filter_parts = [
+                'resource.type="gcs_bucket"',
+                f'resource.labels.bucket_name="{bucket_name}"',
+                'protoPayload.serviceName="storage.googleapis.com"',
+                f'timestamp>="{start_time.isoformat()}"',
+            ]
+            if principal:
+                filter_parts.append(f'protoPayload.authenticationInfo.principalEmail="{principal}"')
+
+            filter_str = " AND ".join(filter_parts)
+            logs: list[dict[str, Any]] = []
+            max_entries = 200
+
+            for entry in client.list_entries(
+                filter_=filter_str,
+                order_by=gcp_logging.DESCENDING,
+                max_results=max_entries,
+            ):
+                api_repr = entry.to_api_repr()
+                payload = api_repr.get("protoPayload", {}) or {}
+                request_meta = payload.get("requestMetadata", {}) or {}
+                request = payload.get("request", {}) or {}
+                response = payload.get("response", {}) or {}
+
+                log_entry: dict[str, Any] = {
+                    "callerIp": request_meta.get("callerIp", ""),
+                    "methodName": payload.get("methodName", ""),
+                    "timestamp": api_repr.get("timestamp", ""),
+                }
+
+                size = None
+                for key in ("size", "objectSize", "contentLength", "bytesSent", "bytesReceived"):
+                    if key in response:
+                        size = response.get(key)
+                        break
+                    if key in request:
+                        size = request.get(key)
+                        break
+                if size is not None:
+                    with contextlib.suppress(TypeError, ValueError):
+                        log_entry["size"] = int(size)
+
+                logs.append(log_entry)
+
+            return logs
+        except Exception as exc:
+            logger.warning(f"Cloud Logging query failed for {bucket_name}: {exc}")
+            return []
 
     @staticmethod
     def _block_user(bucket_name: str, principal: str) -> None:

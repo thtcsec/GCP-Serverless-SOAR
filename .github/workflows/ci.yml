@@ -60,13 +60,13 @@ jobs:
       with:
         terraform_version: 1.7.5
 
-    - name: Terraform fmt (root .tf files)
+    - name: Terraform fmt (root + modules)
       run: |
-        terraform fmt *.tf network.tf security.tf compute.tf function.tf monitoring.tf variables.tf outputs.tf provider.tf
+        terraform -chdir=terraform fmt -recursive
 
-    - name: Terraform fmt (check - root .tf files only)
+    - name: Terraform fmt (check - root + modules)
       run: |
-        terraform fmt -check *.tf network.tf security.tf compute.tf function.tf monitoring.tf variables.tf outputs.tf provider.tf
+        terraform -chdir=terraform fmt -check -recursive
 
     - name: Terraform fmt (environments)
       shell: bash

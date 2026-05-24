@@ -32,7 +32,7 @@ variable "pubsub_subscription" {
 # Monitoring Dashboard
 # -------------------------------------------------------------------
 resource "google_monitoring_dashboard" "soar_dashboard" {
-  project        = var.project_id
+  project = var.project_id
   dashboard_json = jsonencode({
     displayName = "SOAR Platform — ${var.environment}"
     mosaicLayout = {
@@ -103,8 +103,8 @@ resource "google_monitoring_dashboard" "soar_dashboard" {
                   timeSeriesFilter = {
                     filter = "metric.type=\"cloudfunctions.googleapis.com/function/execution_times\" resource.type=\"cloud_function\" resource.label.\"function_name\"=\"${fn}\""
                     aggregation = {
-                      alignmentPeriod    = "300s"
-                      perSeriesAligner   = "ALIGN_PERCENTILE_50"
+                      alignmentPeriod  = "300s"
+                      perSeriesAligner = "ALIGN_PERCENTILE_50"
                     }
                   }
                 }

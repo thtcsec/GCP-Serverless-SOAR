@@ -54,12 +54,12 @@ module "security_enterprise" {
 module "workflows" {
   source = "../../modules/workflows"
 
-  environment              = var.environment
-  project_id               = var.project_id
-  region                   = var.region
-  approval_wait_time        = var.approval_wait_time
-  isolation_firewall_name  = module.infra.isolation_firewall_name
-  labels                   = var.labels
+  environment             = var.environment
+  project_id              = var.project_id
+  region                  = var.region
+  approval_wait_time      = var.approval_wait_time
+  isolation_firewall_name = module.infra.isolation_firewall_name
+  labels                  = var.labels
 }
 
 module "queues" {
@@ -78,8 +78,8 @@ module "containers" {
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  isolation_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/isolation-worker:latest"
-  forensics_worker_image   = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/forensics-worker:latest"
+  isolation_worker_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/isolation-worker:latest"
+  forensics_worker_image  = "${var.region}-docker.pkg.dev/${var.project_id}/soar-containers/forensics-worker:latest"
   isolation_firewall_name = module.infra.isolation_firewall_name
   labels                  = var.labels
 }
@@ -90,8 +90,8 @@ module "integrations" {
   environment              = var.environment
   project_id               = var.project_id
   region                   = var.region
-  enable_slack_integration  = var.enable_slack_integration
+  enable_slack_integration = var.enable_slack_integration
   enable_jira_integration  = var.enable_jira_integration
-  enable_siem_integration   = var.enable_siem_integration
+  enable_siem_integration  = var.enable_siem_integration
   labels                   = var.labels
 }

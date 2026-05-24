@@ -9,7 +9,7 @@ data "archive_file" "function_zip" {
 resource "google_storage_bucket" "function_bucket" {
   name     = "${var.project_id}-soar-functions-src"
   location = var.region
-  
+
   uniform_bucket_level_access = true
 }
 
@@ -38,12 +38,12 @@ resource "google_cloudfunctions2_function" "soar_responder_function" {
   }
 
   service_config {
-    max_instance_count = var.function_max_instances
-    min_instance_count = var.function_min_instances
-    available_memory   = var.function_memory
-    timeout_seconds    = var.function_timeout_seconds
+    max_instance_count    = var.function_max_instances
+    min_instance_count    = var.function_min_instances
+    available_memory      = var.function_memory
+    timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
-    
+
     environment_variables = {
       SLACK_WEBHOOK_URL = var.slack_webhook_url
     }
@@ -75,14 +75,14 @@ resource "google_cloudfunctions2_function" "sa_soar_responder_function" {
   }
 
   service_config {
-    max_instance_count = var.function_max_instances
-    min_instance_count = var.function_min_instances
-    available_memory   = var.function_memory
-    timeout_seconds    = var.function_timeout_seconds
+    max_instance_count    = var.function_max_instances
+    min_instance_count    = var.function_min_instances
+    available_memory      = var.function_memory
+    timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
-    
+
     environment_variables = {
-      PROJECT_ID = var.project_id
+      PROJECT_ID  = var.project_id
       ALERT_TOPIC = google_pubsub_topic.scc_findings_topic.name
     }
   }
@@ -116,15 +116,15 @@ resource "google_cloudfunctions2_function" "storage_soar_responder_function" {
   }
 
   service_config {
-    max_instance_count = var.function_max_instances
-    min_instance_count = var.function_min_instances
-    available_memory   = var.function_memory
-    timeout_seconds    = var.function_timeout_seconds
+    max_instance_count    = var.function_max_instances
+    min_instance_count    = var.function_min_instances
+    available_memory      = var.function_memory
+    timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
-    
+
     environment_variables = {
-      PROJECT_ID = var.project_id
-      ALERT_TOPIC  = google_pubsub_topic.scc_findings_topic.name
+      PROJECT_ID             = var.project_id
+      ALERT_TOPIC            = google_pubsub_topic.scc_findings_topic.name
       EXFILTRATION_THRESHOLD = "10737418240"
     }
   }

@@ -31,7 +31,7 @@ resource "google_cloud_run_service" "isolation_worker" {
     spec {
       containers {
         image = var.isolation_worker_image
-        
+
         resources {
           limits = {
             cpu    = "1000m"
@@ -66,9 +66,9 @@ resource "google_cloud_run_service" "isolation_worker" {
             port = 8080
           }
           initial_delay_seconds = 10
-          timeout_seconds        = 5
-          period_seconds         = 10
-          failure_threshold      = 3
+          timeout_seconds       = 5
+          period_seconds        = 10
+          failure_threshold     = 3
         }
 
         liveness_probe {
@@ -77,9 +77,9 @@ resource "google_cloud_run_service" "isolation_worker" {
             port = 8080
           }
           initial_delay_seconds = 30
-          timeout_seconds        = 5
-          period_seconds         = 10
-          failure_threshold      = 3
+          timeout_seconds       = 5
+          period_seconds        = 10
+          failure_threshold     = 3
         }
       }
 
@@ -89,7 +89,7 @@ resource "google_cloud_run_service" "isolation_worker" {
   }
 
   traffic {
-    percent = 100
+    percent         = 100
     latest_revision = true
   }
 }
@@ -114,7 +114,7 @@ resource "google_cloud_run_service" "forensics_worker" {
     spec {
       containers {
         image = var.forensics_worker_image
-        
+
         resources {
           limits = {
             cpu    = "2000m"
@@ -149,9 +149,9 @@ resource "google_cloud_run_service" "forensics_worker" {
             port = 8080
           }
           initial_delay_seconds = 30
-          timeout_seconds        = 10
-          period_seconds         = 20
-          failure_threshold      = 3
+          timeout_seconds       = 10
+          period_seconds        = 20
+          failure_threshold     = 3
         }
 
         liveness_probe {
@@ -160,19 +160,19 @@ resource "google_cloud_run_service" "forensics_worker" {
             port = 8080
           }
           initial_delay_seconds = 60
-          timeout_seconds        = 10
-          period_seconds         = 30
-          failure_threshold      = 3
+          timeout_seconds       = 10
+          period_seconds        = 30
+          failure_threshold     = 3
         }
       }
 
-      container_concurrency = 1 # Forensics is resource-intensive, run one at a time
+      container_concurrency = 1    # Forensics is resource-intensive, run one at a time
       timeout_seconds       = 3600 # 1 hour for forensic operations
     }
   }
 
   traffic {
-    percent = 100
+    percent         = 100
     latest_revision = true
   }
 }
@@ -244,7 +244,7 @@ resource "google_storage_bucket" "forensics_bucket" {
   name          = "${var.project_id}-soar-forensics-${var.environment}"
   location      = var.region
   storage_class = "STANDARD"
-  
+
   uniform_bucket_level_access = true
 
   labels = merge(

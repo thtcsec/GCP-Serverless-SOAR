@@ -57,8 +57,8 @@ module "workflows" {
   environment             = var.environment
   project_id              = var.project_id
   region                  = var.region
-  approval_wait_time       = var.approval_wait_time
-  isolation_firewall_name  = module.infra.isolation_firewall_name
+  approval_wait_time      = var.approval_wait_time
+  isolation_firewall_name = module.infra.isolation_firewall_name
   labels                  = var.labels
 }
 
