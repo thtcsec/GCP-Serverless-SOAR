@@ -72,4 +72,4 @@ def test_execute_dry_run_preview(gcp_abuse_event):
     assert result["mode"] == "dry_run"
     assert result["playbook"] == "APIGatewayAbuse"
     assert result["target_resource"] == "203.0.113.5"
-    assert len(result["planned_actions"]) == 2
+    assert len(result["planned_actions"]) == 3

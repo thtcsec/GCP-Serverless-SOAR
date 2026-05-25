@@ -6,13 +6,17 @@ Handles DDoS or application layer abuse detected by Cloud Armor or API Gateway.
 from __future__ import annotations
 
 import contextlib
+import json
 import os
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from google.cloud import compute_v1
+from google.cloud import logging as gcp_logging
 
 from src.clients import gcp
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.config import config
 from src.core.logger import logger
 from src.models.events import APIGatewayAuditEvent
 from src.playbooks.base import Playbook
@@ -67,6 +71,8 @@ class APIGatewayAbusePlaybook(Playbook):
                 logger.warning("Cloud Armor Policy configuration missing in env vars")
                 return False
 
+            self._collect_evidence(client_ip, event_data)
+
             target_ip = f"{client_ip}/32" if ":" not in client_ip else f"{client_ip}/128"
             self._block_ip(target_ip)
 
@@ -95,18 +101,97 @@ class APIGatewayAbusePlaybook(Playbook):
             "planned_actions": [
                 {
                     "step": 1,
+                    "action": "collect_evidence",
+                    "target": config.forensic_bucket or "UNCONFIGURED",
+                    "details": "Store Cloud Logging evidence to GCS if FORENSIC_BUCKET is configured.",
+                },
+                {
+                    "step": 2,
                     "action": "get_security_policy",
                     "target": self.policy_name or "UNCONFIGURED",
                     "details": f"Fetch Cloud Armor policy in project {self.project_id or 'UNCONFIGURED'}.",
                 },
                 {
-                    "step": 2,
+                    "step": 3,
                     "action": "add_rule",
                     "target": target_ip,
                     "details": f"Add deny(403) rule for {target_ip} at priority {self.priority}.",
                 },
             ],
         }
+
+    @staticmethod
+    def _safe_key_component(value: str) -> str:
+        return value.replace(":", "_").replace("/", "_")
+
+    def _collect_evidence(self, client_ip: str, event_data: dict[str, Any]) -> None:
+        if not config.forensic_bucket:
+            return
+
+        try:
+            lookback_minutes = int(os.environ.get("API_EVIDENCE_LOOKBACK_MINUTES", "15"))
+            max_entries = int(os.environ.get("API_EVIDENCE_MAX_ENTRIES", "200"))
+            services_raw = os.environ.get(
+                "API_EVIDENCE_SERVICES",
+                "apigateway.googleapis.com,run.googleapis.com,cloudfunctions.googleapis.com,compute.googleapis.com",
+            )
+            services = [s.strip() for s in services_raw.split(",") if s.strip()]
+
+            start_time = datetime.now(UTC) - timedelta(minutes=lookback_minutes)
+            service_filter = " OR ".join([f'protoPayload.serviceName="{s}"' for s in services])
+            filter_parts = [
+                f'timestamp>="{start_time.isoformat()}"',
+                f'protoPayload.requestMetadata.callerIp="{client_ip}"',
+            ]
+            if service_filter:
+                filter_parts.append(f"({service_filter})")
+
+            filter_str = " AND ".join(filter_parts)
+            logging_client = gcp.get_logging_client()
+
+            logs: list[dict[str, Any]] = []
+            for entry in logging_client.list_entries(
+                filter_=filter_str,
+                order_by=gcp_logging.DESCENDING,
+                max_results=max_entries,
+            ):
+                api_repr = entry.to_api_repr()
+                payload = api_repr.get("protoPayload", {}) or {}
+                request_meta = payload.get("requestMetadata", {}) or {}
+                status = payload.get("status", {}) or {}
+                logs.append(
+                    {
+                        "timestamp": api_repr.get("timestamp", ""),
+                        "service": payload.get("serviceName", ""),
+                        "method": payload.get("methodName", ""),
+                        "resource": payload.get("resourceName", ""),
+                        "callerIp": request_meta.get("callerIp", ""),
+                        "userAgent": request_meta.get("callerSuppliedUserAgent", ""),
+                        "statusCode": status.get("code", 0),
+                    }
+                )
+
+            safe_ip = self._safe_key_component(client_ip) or "unknown"
+            ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+            key = f"evidence/api_gateway/{safe_ip}/{ts}.json"
+            payload = {
+                "client_ip": client_ip,
+                "collected_at": datetime.now(UTC).isoformat(),
+                "event": event_data,
+                "logs": logs,
+            }
+
+            bucket = gcp.get_storage_client().bucket(config.forensic_bucket)
+            bucket.blob(key).upload_from_string(json.dumps(payload, default=str), content_type="application/json")
+
+            self.audit.log(
+                AuditAction.COLLECT_EVIDENCE,
+                client_ip,
+                actor="GCP_SOAR",
+                details={"gcs_key": key},
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to collect API abuse evidence for {client_ip}: {exc}")
 
     def _block_ip(self, target_ip: str) -> None:
         """Add a deny rule to Cloud Armor Security Policy."""
