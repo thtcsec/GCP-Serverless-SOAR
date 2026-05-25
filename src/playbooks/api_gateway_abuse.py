@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -124,6 +125,26 @@ class APIGatewayAbusePlaybook(Playbook):
     def _safe_key_component(value: str) -> str:
         return value.replace(":", "_").replace("/", "_")
 
+    @staticmethod
+    def _top_counts(values: list[str], limit: int) -> list[dict[str, Any]]:
+        counter = Counter(v for v in values if v)
+        return [{"value": value, "count": count} for value, count in counter.most_common(limit)]
+
+    def _summarize_logs(self, logs: list[dict[str, Any]]) -> dict[str, Any]:
+        top_n = int(os.environ.get("API_EVIDENCE_TOP_N", "5"))
+        services = [str(entry.get("service", "")) for entry in logs]
+        methods = [str(entry.get("method", "")) for entry in logs]
+        status_codes = [str(entry.get("statusCode", "")) for entry in logs]
+        user_agents = [str(entry.get("userAgent", "")) for entry in logs]
+
+        return {
+            "entries": len(logs),
+            "top_services": self._top_counts(services, top_n),
+            "top_methods": self._top_counts(methods, top_n),
+            "top_status_codes": self._top_counts(status_codes, top_n),
+            "top_user_agents": self._top_counts(user_agents, top_n),
+        }
+
     def _collect_evidence(self, client_ip: str, event_data: dict[str, Any]) -> None:
         if not config.forensic_bucket:
             return
@@ -179,6 +200,7 @@ class APIGatewayAbusePlaybook(Playbook):
                 "collected_at": datetime.now(UTC).isoformat(),
                 "event": event_data,
                 "logs": logs,
+                "summary": self._summarize_logs(logs),
             }
 
             bucket = gcp.get_storage_client().bucket(config.forensic_bucket)
