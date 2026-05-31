@@ -15,8 +15,10 @@ from typing import Any
 from src.clients.gcp import get_storage_client
 from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.config import config
+from src.core.event_normalizer import UnifiedIncident
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import SCCFinding
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 logger = logging.getLogger("gcp-soar.playbook.gke_pod")
@@ -38,19 +40,20 @@ class GKEPodIsolationPlaybook(Playbook):
     def __init__(self) -> None:
         self.audit = AuditLogger()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            finding = SCCFinding(**event_data)
-            # Must be a GKE cluster or Node resource, and match one of our categories
+            finding = SCCFinding(**incident.raw_event)
             is_gke = "gke.googleapis.com" in finding.resource.type or "gke.googleapis.com" in finding.resource_name
             return is_gke and any(cat.lower() in finding.category.lower() for cat in _GKE_THREAT_CATEGORIES)
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("GKEPodIsolation"):
             try:
-                finding = SCCFinding(**event_data)
+                finding = SCCFinding(**incident.raw_event)
 
                 # Extract resource components
                 # GKE findings usually have properties inside sourceProperties
@@ -67,7 +70,7 @@ class GKEPodIsolationPlaybook(Playbook):
                     logger.warning("No pod name found in finding; cannot isolate specific pod.")
                     return False
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(
                         cluster_name, namespace_name, pod_name, finding.category, finding.severity
                     )
@@ -123,12 +126,6 @@ class GKEPodIsolationPlaybook(Playbook):
         elif severity == "MEDIUM":
             return "REQUIRE_APPROVAL"
         return "IGNORE"
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(

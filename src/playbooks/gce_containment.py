@@ -12,9 +12,12 @@ from typing import Any
 from google.cloud import compute_v1
 
 from ..clients.gcp import get_disks_client, get_instances_client
+from ..core.audit_logger import AuditAction, get_audit_logger
 from ..core.config import config
+from ..core.event_normalizer import UnifiedIncident
 from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
 from ..models.events import SCCFinding
+from ._helpers import coerce_incident, is_dry_run
 
 logger = logging.getLogger("gcp-soar.playbook.gce")
 tracer = get_tracer("gcp-soar.playbook.gce")
@@ -29,9 +32,10 @@ class GCEContainment:
     # Protocol methods
     # ------------------------------------------------------------------ #
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            finding = SCCFinding(**event_data)
+            finding = SCCFinding(**incident.raw_event)
             return (
                 finding.is_compute_resource
                 and finding.is_high_severity
@@ -40,18 +44,20 @@ class GCEContainment:
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("GCEContainment"):
-            finding = SCCFinding(**event_data)
+            finding = SCCFinding(**incident.raw_event)
             project_id, zone, instance_name = self._parse_resource(finding.resource_name)
 
             if not instance_name:
                 logger.error("Cannot extract instance details from resource name")
                 return False
 
-            if self._is_dry_run(event_data):
+            if is_dry_run(incident):
                 return self._build_preview(project_id, zone, instance_name, finding.category)
 
+            audit = get_audit_logger()
             logger.info(
                 f"Executing GCE containment for {instance_name}",
                 extra={"json_fields": {"action": "GCE_CONTAINMENT", "instance": instance_name}},
@@ -62,14 +68,19 @@ class GCEContainment:
                 with tracer.start_as_current_span("gce_containment") as span:
                     span.set_attribute("instance", instance_name)
                     self._isolate_instance(project_id, zone, instance_name)
+                    audit.log(AuditAction.ISOLATE_NETWORK, instance_name, details={"project": project_id})
                     self._detach_service_account(project_id, zone, instance_name)
+                    audit.log(AuditAction.REVOKE_SA_KEYS, instance_name, details={"action": "detach_sa"})
                     self._block_ssh_keys(project_id, zone, instance_name)
                     self._take_snapshot(project_id, zone, instance_name, finding.category)
+                    audit.log(AuditAction.SNAPSHOT_DISK, instance_name)
                     self._stop_instance(project_id, zone, instance_name)
+                    audit.log(AuditAction.STOP_INSTANCE, instance_name)
                 logger.info(f"GCE containment completed for {instance_name}")
                 return True
             except Exception as exc:
                 logger.error(f"GCE containment failed for {instance_name}: {exc}")
+                audit.log(AuditAction.PLAYBOOK_FAILED, instance_name, details={"error": str(exc)}, success=False)
                 return False
 
     # ------------------------------------------------------------------ #
@@ -85,11 +96,6 @@ class GCEContainment:
         except IndexError:
             return None, None, None
 
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(project_id: str, zone: str, instance_name: str, category: str) -> dict[str, Any]:

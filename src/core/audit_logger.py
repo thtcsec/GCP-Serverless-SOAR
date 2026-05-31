@@ -79,6 +79,17 @@ class AuditEntry:
         }
 
 
+_default_audit_logger: AuditLogger | None = None
+
+
+def get_audit_logger() -> AuditLogger:
+    """Return the process-wide audit logger singleton."""
+    global _default_audit_logger
+    if _default_audit_logger is None:
+        _default_audit_logger = AuditLogger()
+    return _default_audit_logger
+
+
 class AuditLogger:
     """
     Structured audit logger for all SOAR operations.

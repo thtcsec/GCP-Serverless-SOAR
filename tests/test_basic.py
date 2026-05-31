@@ -151,8 +151,18 @@ class TestPlaybookRegistry:
         event = {"detail-type": "test"}
         result = registry.dispatch(event)
 
-        mock_playbook.can_handle.assert_called_once_with(event)
-        mock_playbook.execute.assert_called_once_with(event)
+        from src.core.event_normalizer import UnifiedIncident
+
+        mock_playbook.can_handle.assert_called_once()
+        called_for_handle = mock_playbook.can_handle.call_args[0][0]
+        assert isinstance(called_for_handle, UnifiedIncident)
+        assert called_for_handle.raw_event == event
+        from src.core.event_normalizer import UnifiedIncident
+
+        mock_playbook.execute.assert_called_once()
+        called_incident = mock_playbook.execute.call_args[0][0]
+        assert isinstance(called_incident, UnifiedIncident)
+        assert called_incident.raw_event == event
         assert result is True
 
     def test_dispatch_no_match(self):

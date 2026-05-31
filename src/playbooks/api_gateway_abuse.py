@@ -18,8 +18,10 @@ from google.cloud import logging as gcp_logging
 from src.clients import gcp
 from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.config import config
+from src.core.event_normalizer import UnifiedIncident
 from src.core.logger import logger
 from src.models.events import APIGatewayAuditEvent
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 
@@ -32,9 +34,10 @@ class APIGatewayAbusePlaybook(Playbook):
         self.policy_name = os.environ.get("CLOUD_ARMOR_POLICY_NAME", "")
         self.priority = int(os.environ.get("CLOUD_ARMOR_BLOCK_PRIORITY", "1000"))
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            # For GCP Audit Logs
+            event_data = incident.raw_event
             proto_payload = event_data.get("protoPayload", {})
             if not proto_payload:
                 return False
@@ -48,8 +51,10 @@ class APIGatewayAbusePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         try:
+            event_data = incident.raw_event
             event = APIGatewayAuditEvent.model_validate(event_data)
             client_ip = event.client_ip
 
@@ -57,7 +62,7 @@ class APIGatewayAbusePlaybook(Playbook):
                 logger.error("No client IP found in APIGateway finding")
                 return False
 
-            if self._is_dry_run(event_data):
+            if is_dry_run(incident):
                 return self._build_preview(client_ip)
 
             logger.info(f"Executing API Gateway Abuse Playbook for IP={client_ip}")
@@ -85,12 +90,6 @@ class APIGatewayAbusePlaybook(Playbook):
             with contextlib.suppress(Exception):
                 self.audit.log(AuditAction.PLAYBOOK_FAILED, "cloud_armor", actor="GCP_SOAR", success=False)
             return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, client_ip: str) -> dict[str, Any]:
         target_ip = f"{client_ip}/32" if ":" not in client_ip else f"{client_ip}/128"

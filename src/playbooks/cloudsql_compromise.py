@@ -10,8 +10,10 @@ import logging
 from typing import Any
 
 from src.core.audit_logger import AuditAction, AuditLogger
+from src.core.event_normalizer import UnifiedIncident
 from src.core.metrics import PlaybookTimer, emit_metric
 from src.models.events import IAMAuditEvent, SCCFinding
+from src.playbooks._helpers import coerce_incident, is_dry_run
 from src.playbooks.base import Playbook
 
 logger = logging.getLogger("gcp-soar.playbook.cloudsql")
@@ -23,9 +25,10 @@ class CloudSQLCompromisePlaybook(Playbook):
     def __init__(self) -> None:
         self.audit = AuditLogger()
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            # Check for SCC finding
+            event_data = incident.raw_event
             if "category" in event_data:
                 finding = SCCFinding(**event_data)
                 is_sql = (
@@ -34,7 +37,6 @@ class CloudSQLCompromisePlaybook(Playbook):
                 )
                 return is_sql and (finding.severity in ("HIGH", "CRITICAL", "MEDIUM"))
 
-            # Check for IAM/Audit event
             if "protoPayload" in event_data:
                 audit = IAMAuditEvent(**event_data)
                 return "cloudsql" in audit.proto_payload.service_name.lower() and audit.is_risky
@@ -43,15 +45,16 @@ class CloudSQLCompromisePlaybook(Playbook):
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("CloudSQLCompromise"):
             try:
+                event_data = incident.raw_event
                 db_id = "unknown"
                 project_id = "unknown"
                 event_name = "CloudSQL_SuspiciousActivity"
-                severity = "HIGH"
+                severity = incident.severity or "HIGH"
 
-                # Parse event source type
                 if "category" in event_data:
                     finding = SCCFinding(**event_data)
                     project_id, db_id = self._parse_resource(finding.resource_name)
@@ -62,14 +65,14 @@ class CloudSQLCompromisePlaybook(Playbook):
                     db_id = audit.proto_payload.resource_name.split("/")[-1]
                     event_name = audit.proto_payload.method_name
 
-                if self._is_dry_run(event_data):
+                if is_dry_run(incident):
                     return self._build_preview(project_id, db_id, event_name, severity)
 
                 logger.info(f"Executing Cloud SQL Compromise playbook for {db_id} (action={event_name})")
                 self.audit.log(AuditAction.PLAYBOOK_STARTED, db_id, actor="GCP_SOAR", details={"event": event_name})
                 emit_metric("findings_processed", 1.0, {"playbook": "CloudSQLCompromise"})
 
-                decision = self._severity_decision(severity)
+                decision = incident.decision or self._severity_decision(severity)
                 self.audit.log(AuditAction.SCORING_DECISION, db_id, actor="GCP_SOAR", details={"decision": decision})
 
                 if decision == "IGNORE":
@@ -77,7 +80,7 @@ class CloudSQLCompromisePlaybook(Playbook):
                     self.audit.log(AuditAction.PLAYBOOK_COMPLETED, db_id, actor="GCP_SOAR")
                     return True
 
-                if decision in ("AUTO_ISOLATE", "REQUIRE_APPROVAL"):
+                if decision in ("AUTO_ISOLATE", "REQUIRE_APPROVAL", "EVALUATE"):
                     self._create_db_backup(project_id, db_id)
 
                 self.audit.log(AuditAction.PLAYBOOK_COMPLETED, db_id, actor="GCP_SOAR")
@@ -111,12 +114,6 @@ class CloudSQLCompromisePlaybook(Playbook):
         elif severity == "MEDIUM":
             return "REQUIRE_APPROVAL"
         return "IGNORE"
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(project_id: str, db_id: str, event_name: str, severity: str) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """
 GCP SOAR Playbook Registry
-Central registry that dispatches events to the correct playbook.
+Central registry that dispatches UnifiedIncident objects to the correct playbook.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from ..core.event_normalizer import EventNormalizer, UnifiedIncident
 from .base import Playbook
 
 logger = logging.getLogger("gcp-soar.registry")
@@ -23,12 +24,17 @@ class PlaybookRegistry:
         self._playbooks.append(playbook)
         logger.info(f"Registered playbook: {playbook.__class__.__name__}")
 
-    def dispatch(self, event_data: dict[str, Any]) -> bool | dict[str, Any] | None:
-        """Find the first playbook that can handle the event and execute it."""
+    def dispatch(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any] | None:
+        """Find the first playbook that can handle the incident and execute it."""
+        unified = EventNormalizer.ensure(incident)
         for playbook in self._playbooks:
-            if playbook.can_handle(event_data):
+            if playbook.can_handle(unified):
                 logger.info(f"Dispatching to playbook: {playbook.__class__.__name__}")
-                return playbook.execute(event_data)
+                return playbook.execute(unified)
 
-        logger.warning("No playbook could handle the event")
+        logger.warning(f"No playbook could handle incident {unified.incident_id}")
         return None
+
+    @property
+    def playbooks(self) -> list[Playbook]:
+        return list(self._playbooks)

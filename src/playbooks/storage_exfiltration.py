@@ -12,9 +12,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..clients.gcp import get_publisher, get_storage_client
+from ..core.audit_logger import AuditAction, get_audit_logger
 from ..core.config import config
+from ..core.event_normalizer import UnifiedIncident
 from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
 from ..models.events import StorageAuditEvent
+from ._helpers import coerce_incident, is_dry_run
 
 logger = logging.getLogger("gcp-soar.playbook.storage")
 tracer = get_tracer("gcp-soar.playbook.storage")
@@ -23,17 +26,20 @@ tracer = get_tracer("gcp-soar.playbook.storage")
 class StorageExfiltration:
     """Detect anomalous storage reads and lock down the bucket."""
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            evt = StorageAuditEvent(**event_data)
+            evt = StorageAuditEvent(**incident.raw_event)
             return evt.is_read_operation
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("StorageExfiltration"):
-            evt = StorageAuditEvent(**event_data)
+            evt = StorageAuditEvent(**incident.raw_event)
             payload = evt.proto_payload
+            audit = get_audit_logger()
 
             bucket_name = self._extract_bucket(payload.resource_name)
             if not bucket_name:
@@ -43,12 +49,17 @@ class StorageExfiltration:
             principal = payload.authentication_info.principal_email
             caller_ip = payload.request.get("callerIp", "")
 
-            if self._is_dry_run(event_data):
+            if is_dry_run(incident):
                 return self._build_preview(bucket_name, principal, caller_ip, payload.method_name)
 
             analysis = self._analyse_patterns(principal, bucket_name)
 
             if not analysis["is_exfiltration"]:
+                audit.log(
+                    AuditAction.COLLECT_EVIDENCE,
+                    bucket_name,
+                    details={"phase": "exfil_analysis", "result": "not_exfiltration", "analysis": analysis},
+                )
                 return True
 
             logger.warning(f"Exfiltration detected on {bucket_name} by {principal}")
@@ -59,12 +70,15 @@ class StorageExfiltration:
                     span.set_attribute("bucket", bucket_name)
                     span.set_attribute("principal", principal)
                     self._block_user(bucket_name, principal)
+                    audit.log(AuditAction.REMOVE_IAM_BINDINGS, bucket_name, details={"principal": principal})
                     self._enable_protections(bucket_name)
                     self._create_forensic_copy(bucket_name, principal, analysis)
+                    audit.log(AuditAction.COLLECT_EVIDENCE, bucket_name, details={"forensic": True})
                     self._send_alert(bucket_name, principal, caller_ip, analysis)
                 return True
             except Exception as exc:
                 logger.error(f"Storage response failed for {bucket_name}: {exc}")
+                audit.log(AuditAction.PLAYBOOK_FAILED, bucket_name, details={"error": str(exc)}, success=False)
                 return False
 
     # ------------------------------------------------------------------ #
@@ -77,11 +91,6 @@ class StorageExfiltration:
             return resource_name.split("projects/_/buckets/")[1].split("/")[0]
         return None
 
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(bucket_name: str, principal: str, caller_ip: str, method_name: str) -> dict[str, Any]:

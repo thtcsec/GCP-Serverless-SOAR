@@ -1,7 +1,8 @@
 """
-GCP SOAR Engine — Event Dispatcher (handlers.py)
-Initialises playbook registry and routes incoming events to the correct playbook.
-Mirrors the AWS handlers.py pattern.
+GCP SOAR Engine — Single Production Entry Point
+
+All security events MUST flow through handle_event().
+Cloud Function / Pub/Sub adapters live in entrypoint.py.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .core.pipeline import IncidentPipeline
 from .playbooks.api_gateway_abuse import APIGatewayAbusePlaybook
 from .playbooks.cloudsql_compromise import CloudSQLCompromisePlaybook
 from .playbooks.gce_containment import GCEContainment
@@ -20,10 +22,6 @@ from .playbooks.storage_exfiltration import StorageExfiltration
 
 logger = logging.getLogger("gcp-soar.handlers")
 
-# ---------------------------------------------------------------------------
-# Registry initialisation (runs once at cold-start)
-# ---------------------------------------------------------------------------
-
 registry = PlaybookRegistry()
 registry.register(GCEContainment())
 registry.register(SACompromise())
@@ -33,30 +31,14 @@ registry.register(RansomwareResponsePlaybook())
 registry.register(GKEPodIsolationPlaybook())
 registry.register(CloudSQLCompromisePlaybook())
 
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
+pipeline = IncidentPipeline(registry=registry)
 
 
 def handle_event(event_data: dict[str, Any]) -> dict[str, Any]:
     """
-    Dispatch *event_data* to the first playbook that can handle it.
+    Canonical SOAR entry point.
 
-    Returns a dict suitable for an HTTP / Cloud Function response.
+    Pipeline: Event → Normalize → Correlate → Score → Decision → Playbook → Audit
     """
-    logger.info("Dispatching event to playbook registry")
-
-    result = registry.dispatch(event_data)
-
-    if result is None:
-        logger.warning("Event was not handled by any playbook")
-        return {"statusCode": 200, "body": "No matching playbook"}
-
-    if isinstance(result, dict):
-        return {"statusCode": 200, "body": result}
-
-    if result:
-        return {"statusCode": 200, "body": "Playbook executed successfully"}
-
-    return {"statusCode": 500, "body": "Playbook execution failed"}
+    logger.info("Processing event through unified incident pipeline")
+    return pipeline.process(event_data)

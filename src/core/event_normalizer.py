@@ -22,7 +22,7 @@ logger = logging.getLogger("gcp-soar.normalizer")
 
 
 class UnifiedIncident(BaseModel):
-    """Platform-agnostic incident representation."""
+    """Platform-agnostic incident representation — canonical schema for the SOAR pipeline."""
 
     incident_id: str = ""
     platform: str = "gcp"
@@ -39,6 +39,16 @@ class UnifiedIncident(BaseModel):
     tags: list[str] = Field(default_factory=list)
     raw_event_type: str = ""
     correlation_keys: list[str] = Field(default_factory=list)
+    raw_event: dict[str, Any] = Field(default_factory=dict)
+    related_incidents: list[str] = Field(default_factory=list)
+    pipeline_options: dict[str, Any] = Field(default_factory=dict)
+
+    def to_playbook_payload(self) -> dict[str, Any]:
+        """Merge canonical fields with the original event for playbook execution."""
+        payload = dict(self.raw_event)
+        payload.update(self.pipeline_options)
+        payload["_incident"] = self.model_dump(exclude={"raw_event"})
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -178,3 +188,22 @@ class EventNormalizer:
 
         logger.warning(f"Unknown event type, cannot normalize: {event_data.keys()}")
         return None
+
+    @classmethod
+    def ensure(cls, event_data: dict[str, Any] | UnifiedIncident) -> UnifiedIncident:
+        """Coerce raw transport payloads into UnifiedIncident objects."""
+        if isinstance(event_data, UnifiedIncident):
+            if not event_data.raw_event:
+                event_data.raw_event = {}
+            return event_data
+
+        incident = cls.normalize(event_data)
+        if incident is None:
+            incident = UnifiedIncident(raw_event_type="unknown")
+        incident.raw_event = event_data
+        incident.pipeline_options = {
+            key: event_data[key]
+            for key in ("dry_run", "preview_only", "execution_mode")
+            if key in event_data
+        }
+        return incident

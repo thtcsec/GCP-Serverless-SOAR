@@ -2,7 +2,10 @@
   <img src="docs/soar_logo.png" alt="SOAR Logo" width="640">
 </p>
 
-# 🚀 GCP Serverless Security Orchestration, Automation, and Response (SOAR)
+# 🚀 AI-Driven Cloud Incident Response Engine (GCP)
+
+> **Unified pipeline:** All events flow through `handlers.handle_event()` → `IncidentPipeline`.
+> See [../README.md](../README.md) and [../ARCHITECTURE_RESET.md](../ARCHITECTURE_RESET.md).
 
 ![GCP](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
@@ -16,49 +19,31 @@ Automated security incident response platform that detects threats using Securit
 
 ## 🏗️ Architecture Overview
 
-### System Architecture
-```
-Threat Detection → Event Router → Message Queue → Workflow Engine → Workers
-     ↓                    ↓              ↓              ↓           ↓
-GuardDuty/SCC → EventBridge/Eventarc → SQS/PubSub → Step Functions/Cloud Workflows → Container Workers
-```
+### Single Incident Pipeline (Production)
 
-### GCP Architecture Flow
 ```mermaid
-flowchart TD
-    subgraph "Detection Layer"
-        A[Security Command Center] --> D[Eventarc]
-        B[Cloud Audit Logs] --> D
-        C[Threat Detection] --> E[Pub/Sub]
-    end
-    
-    subgraph "Processing Layer"
-        D --> F[Cloud Workflows]
-        E --> G[Cloud Run Workers]
-    end
-    
-    subgraph "Response Layer"
-        F --> H[Isolation Workers]
-        F --> I[Forensics Workers]
-        G --> J[Isolation Workers]
-        G --> K[Forensics Workers]
-    end
-    
-    subgraph "Notification Layer"
-        H --> L[Slack/Jira/SIEM]
-        I --> L
-        J --> L
-        K --> L
-    end
+flowchart LR
+    A[Event Sources] --> B[entrypoint.py]
+    B --> C[handlers.handle_event]
+    C --> D[IncidentPipeline]
+    D --> E[EventNormalizer]
+    E --> F[IncidentCorrelator]
+    F --> G[PolicyEngine]
+    G --> H{Decision}
+    H -->|IGNORE| I[Audit]
+    H -->|REQUIRE_APPROVAL| J[Slack + Audit]
+    H -->|AUTO_ISOLATE / EVALUATE| K[PlaybookRegistry]
+    K --> L[Playbooks]
+    L --> I
 ```
 
-### Workflow Process
-1. **Detection:** SCC detects threats (severity >= 7.0)
-2. **Event Routing:** Eventarc routes to Pub/Sub queue
-3. **Workflow Engine:** Cloud Workflows orchestrates response
-4. **Container Workers:** Cloud Run performs long-running operations
-5. **Human Approval:** Manual approval for critical actions
-6. **Integrations:** Slack, Jira, SIEM notifications
+**Entry point:** `src/handlers.py` → `handle_event()`
+
+**Transport adapters:** `src/entrypoint.py` (Pub/Sub, Eventarc — no business logic)
+
+### Legacy Diagram (Deprecated Paths Removed)
+
+The previous multi-path architecture (direct `main.py` containment, Workflow YAML business logic) has been consolidated. Enterprise Terraform modules may still exist for infra scaffolding; application logic runs only through the pipeline above.
 
 ### 🖼️ High-Level Architecture
 ![Architecture Diagram](images/gcp_soar.png)

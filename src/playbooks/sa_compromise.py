@@ -10,9 +10,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..clients.gcp import get_iam_client, get_publisher, get_resource_manager_client
+from ..core.audit_logger import AuditAction, get_audit_logger
 from ..core.config import config
+from ..core.event_normalizer import UnifiedIncident
 from ..core.metrics import PlaybookTimer, emit_metric, get_tracer
+from ..integrations.slack_notifier import SlackNotifier
 from ..models.events import IAMAuditEvent
+from ._helpers import coerce_incident, is_dry_run
 
 logger = logging.getLogger("gcp-soar.playbook.sa")
 tracer = get_tracer("gcp-soar.playbook.sa")
@@ -37,17 +41,20 @@ CRITICAL_ROLES = [
 class SACompromise:
     """Detect, disable, and alert on service-account compromise."""
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            evt = IAMAuditEvent(**event_data)
+            evt = IAMAuditEvent(**incident.raw_event)
             return evt.is_risky
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         with PlaybookTimer("SACompromise"):
-            evt = IAMAuditEvent(**event_data)
+            evt = IAMAuditEvent(**incident.raw_event)
             payload = evt.proto_payload
+            audit = get_audit_logger()
 
             sa_email = self._extract_sa_email(payload.resource_name)
             if not sa_email:
@@ -57,50 +64,24 @@ class SACompromise:
             caller_ip = payload.request.get("callerIp", "")
             action = payload.method_name
 
-            if self._is_dry_run(event_data):
+            if is_dry_run(incident):
                 return self._build_preview(sa_email, action, caller_ip)
 
-            intel_report = {}
-            risk_data = {"decision": "IGNORE", "risk_score": 0.0}
+            score = incident.risk_score
+            decision = incident.decision
+            intel_report = incident.intel_summary
 
-            # 1. Threat Intel & Scoring
-            if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
-                try:
-                    from ..integrations.intel import ThreatIntelService
-                    from ..integrations.scoring import ScoringEngine
-
-                    intel_service = ThreatIntelService()
-                    scoring_engine = ScoringEngine()
-
-                    intel_report = intel_service.get_ip_report(caller_ip)
-                    base_risk = self._calculate_base_risk(payload, caller_ip)
-
-                    risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
-                except Exception as e:
-                    logger.error(f"Failed to calculate risk score: {e}")
-            else:
-                # Local fallback if IP is internal or missing
-                base_risk = self._calculate_base_risk(payload, caller_ip)
-                from ..integrations.scoring import ScoringEngine
-
-                scoring_engine = ScoringEngine()
-                risk_data = scoring_engine.calculate_risk_score(intel_report, initial_severity=base_risk)
-
-            decision = str(risk_data.get("decision", "IGNORE"))
-            raw_score = risk_data.get("risk_score", 0.0)
-            score = float(str(raw_score))
-
-            # 2. Decision Routing
             if decision == "IGNORE":
-                logger.info(f"Ignored SA Compromise for {sa_email} due to low risk score ({score}).")
+                logger.info(f"Ignored SA Compromise for {sa_email} (score={score}).")
                 return True
 
-            elif decision == "REQUIRE_APPROVAL":
+            if decision == "REQUIRE_APPROVAL":
                 logger.info(f"SA Compromise for {sa_email} requires human approval. Score: {score}")
                 self._notify_slack(sa_email, action, caller_ip, score, decision, intel_report)
+                audit.log(AuditAction.APPROVAL_REQUESTED, sa_email, details={"score": score})
                 return True
 
-            elif decision == "AUTO_ISOLATE":
+            if decision == "AUTO_ISOLATE":
                 logger.critical(f"SA Auto-Isolation triggered for {sa_email} on {action} (Score: {score})")
                 emit_metric("findings_processed", 1.0, {"playbook": "SACompromise"})
 
@@ -109,21 +90,19 @@ class SACompromise:
                         span.set_attribute("service_account", sa_email)
                         span.set_attribute("risk_score", score)
                         self._disable_keys(sa_email)
+                        audit.log(AuditAction.REVOKE_SA_KEYS, sa_email)
                         self._remove_critical_roles(sa_email)
+                        audit.log(AuditAction.REMOVE_IAM_BINDINGS, sa_email)
                         self._send_alert(sa_email, payload.authentication_info.principal_email, int(score))
                         self._notify_slack(sa_email, action, caller_ip, score, decision, intel_report)
                     return True
                 except Exception as exc:
                     logger.error(f"SA response failed for {sa_email}: {exc}")
+                    audit.log(AuditAction.PLAYBOOK_FAILED, sa_email, details={"error": str(exc)}, success=False)
                     return False
 
             return False
 
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     @staticmethod
     def _build_preview(sa_email: str, action: str, caller_ip: str) -> dict[str, Any]:
@@ -160,25 +139,12 @@ class SACompromise:
             ],
         }
 
-    # ------------------------------------------------------------------ #
 
     @staticmethod
     def _extract_sa_email(resource_name: str) -> str | None:
         if "serviceAccounts/" in resource_name:
             return resource_name.split("serviceAccounts/")[1]
         return None
-
-    @staticmethod
-    def _calculate_base_risk(payload, caller_ip: str) -> float:
-        score = 0
-        if any(m in payload.method_name for m in HIGH_RISK_METHODS):
-            score += 5
-        if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
-            score += 3
-        hour = datetime.now(UTC).hour
-        if hour >= 23 or hour <= 5:
-            score += 2
-        return float(min(score, 10))
 
     @staticmethod
     def _disable_keys(sa_email: str) -> None:
@@ -241,8 +207,6 @@ class SACompromise:
     ) -> None:
         """Sends an alert to Slack."""
         try:
-            from ..integrations.slack_notifier import SlackNotifier
-
             notifier = SlackNotifier()
             incident_data = {
                 "id": f"SA-{sa_email}-{action}",

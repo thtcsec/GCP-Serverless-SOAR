@@ -22,8 +22,10 @@ from google.cloud import compute_v1
 from src.clients import gcp
 from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.config import config
+from src.core.event_normalizer import UnifiedIncident
 from src.models.events import SCCFinding
 from src.playbooks.base import Playbook
+from src.playbooks._helpers import coerce_incident, is_dry_run
 
 logger = logging.getLogger("gcp-soar.playbook.ransomware")
 
@@ -40,20 +42,22 @@ _RANSOMWARE_CATEGORIES: list[str] = [
 class RansomwareResponsePlaybook(Playbook):
     """Auto-contain ransomware threats across GCE and Cloud Storage."""
 
-    def can_handle(self, event_data: dict[str, Any]) -> bool:
+    def can_handle(self, incident: UnifiedIncident | dict[str, Any]) -> bool:
+        incident = coerce_incident(incident)
         try:
-            finding = SCCFinding(**event_data)
+            finding = SCCFinding(**incident.raw_event)
             return finding.is_high_severity and any(
                 cat.lower() in finding.category.lower() for cat in _RANSOMWARE_CATEGORIES
             )
         except Exception:
             return False
 
-    def execute(self, event_data: dict[str, Any]) -> bool | dict[str, Any]:
+    def execute(self, incident: UnifiedIncident | dict[str, Any]) -> bool | dict[str, Any]:
+        incident = coerce_incident(incident)
         try:
-            finding = SCCFinding(**event_data)
+            finding = SCCFinding(**incident.raw_event)
 
-            if self._is_dry_run(event_data):
+            if is_dry_run(incident):
                 return self._build_preview(finding)
 
             audit = AuditLogger()
@@ -91,12 +95,6 @@ class RansomwareResponsePlaybook(Playbook):
                     success=False,
                 )
             return False
-
-    @staticmethod
-    def _is_dry_run(event_data: dict[str, Any]) -> bool:
-        return bool(
-            event_data.get("dry_run") or event_data.get("preview_only") or event_data.get("execution_mode") == "dry_run"
-        )
 
     def _build_preview(self, finding: SCCFinding) -> dict[str, Any]:
         planned_actions: list[dict[str, Any]] = []

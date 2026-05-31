@@ -24,7 +24,7 @@ resource "google_storage_bucket_object" "function_archive" {
 resource "google_cloudfunctions2_function" "soar_responder_function" {
   name        = "soar-incident-responder"
   location    = var.region
-  description = "SOAR Python webhook to isolate compromised VMs"
+  description = "Unified SOAR incident handler — delegates to handlers.handle_event pipeline"
 
   build_config {
     runtime     = "python312"

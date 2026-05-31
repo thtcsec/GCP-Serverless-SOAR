@@ -6,9 +6,27 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.core.event_normalizer import EventNormalizer, UnifiedIncident
 from src.playbooks.gce_containment import GCEContainment
 from src.playbooks.sa_compromise import SACompromise
 from src.playbooks.storage_exfiltration import StorageExfiltration
+
+
+def build_incident(raw_event: dict, **overrides) -> UnifiedIncident:
+    incident = EventNormalizer.normalize(raw_event)
+    if incident is None:
+        incident = UnifiedIncident(raw_event_type="unknown", raw_event=raw_event)
+    else:
+        incident.raw_event = raw_event
+
+    incident.pipeline_options = {
+        key: raw_event[key]
+        for key in ("dry_run", "preview_only", "execution_mode")
+        if key in raw_event
+    }
+    for key, value in overrides.items():
+        setattr(incident, key, value)
+    return incident
 
 
 class TestGCEContainmentPlaybook:
@@ -40,26 +58,26 @@ class TestGCEContainmentPlaybook:
 
     def test_can_handle_high_severity_compute(self, playbook, valid_scc_finding):
         """Test playbook handles HIGH severity compute findings"""
-        assert playbook.can_handle(valid_scc_finding) is True
+        assert playbook.can_handle(build_incident(valid_scc_finding)) is True
 
     def test_can_handle_critical_severity(self, playbook, valid_scc_finding):
         """Test playbook handles CRITICAL severity"""
         valid_scc_finding["severity"] = "CRITICAL"
-        assert playbook.can_handle(valid_scc_finding) is True
+        assert playbook.can_handle(build_incident(valid_scc_finding)) is True
 
     def test_cannot_handle_low_severity(self, playbook, valid_scc_finding):
         """Test playbook rejects LOW severity"""
         valid_scc_finding["severity"] = "LOW"
-        assert playbook.can_handle(valid_scc_finding) is False
+        assert playbook.can_handle(build_incident(valid_scc_finding)) is False
 
     def test_cannot_handle_non_compute_resource(self, playbook, valid_scc_finding):
         """Test playbook rejects non-compute resources"""
         valid_scc_finding["resourceName"] = "//storage.googleapis.com/projects/test/buckets/test-bucket"
-        assert playbook.can_handle(valid_scc_finding) is False
+        assert playbook.can_handle(build_incident(valid_scc_finding)) is False
 
     def test_cannot_handle_malformed_event(self, playbook):
         """Test playbook rejects malformed events"""
-        assert playbook.can_handle({"invalid": "data"}) is False
+        assert playbook.can_handle(build_incident({"invalid": "data"})) is False
 
     @patch("src.playbooks.gce_containment.get_instances_client")
     @patch("src.playbooks.gce_containment.get_disks_client")
@@ -86,7 +104,7 @@ class TestGCEContainmentPlaybook:
         mock_instances.stop.return_value = mock_operation
         mock_disks.create_snapshot.return_value = mock_operation
 
-        result = playbook.execute(valid_scc_finding)
+        result = playbook.execute(build_incident(valid_scc_finding))
 
         assert result is True
         assert mock_instances.set_tags.called
@@ -97,7 +115,7 @@ class TestGCEContainmentPlaybook:
         """Test dry-run preview skips GCP API calls"""
         valid_scc_finding["dry_run"] = True
 
-        result = playbook.execute(valid_scc_finding)
+        result = playbook.execute(build_incident(valid_scc_finding))
 
         assert result["mode"] == "dry_run"
         assert result["playbook"] == "GCEContainment"
@@ -129,21 +147,21 @@ class TestSACompromisePlaybook:
 
     def test_can_handle_risky_iam_action(self, playbook, valid_iam_event):
         """Test playbook handles risky IAM actions"""
-        assert playbook.can_handle(valid_iam_event) is True
+        assert playbook.can_handle(build_incident(valid_iam_event)) is True
 
     def test_can_handle_set_iam_policy(self, playbook, valid_iam_event):
         """Test playbook handles SetIamPolicy"""
         valid_iam_event["protoPayload"]["methodName"] = "SetIamPolicy"
-        assert playbook.can_handle(valid_iam_event) is True
+        assert playbook.can_handle(build_incident(valid_iam_event)) is True
 
     def test_cannot_handle_safe_action(self, playbook, valid_iam_event):
         """Test playbook rejects safe IAM actions"""
         valid_iam_event["protoPayload"]["methodName"] = "GetServiceAccount"
-        assert playbook.can_handle(valid_iam_event) is False
+        assert playbook.can_handle(build_incident(valid_iam_event)) is False
 
     def test_cannot_handle_malformed_event(self, playbook):
         """Test playbook rejects malformed events"""
-        assert playbook.can_handle({"invalid": "data"}) is False
+        assert playbook.can_handle(build_incident({"invalid": "data"})) is False
 
     @patch("src.playbooks.sa_compromise.SACompromise._notify_slack")
     @patch("src.playbooks.sa_compromise.SACompromise._send_alert")
@@ -177,7 +195,7 @@ class TestSACompromisePlaybook:
             "risk_score": 90.0,
         }
 
-        result = playbook.execute(valid_iam_event)
+        result = playbook.execute(build_incident(valid_iam_event, decision="AUTO_ISOLATE", risk_score=90.0))
 
         assert result is True
         assert mock_disable.called
@@ -215,7 +233,7 @@ class TestSACompromisePlaybook:
             "risk_score": 50.0,
         }
 
-        result = playbook.execute(valid_iam_event)
+        result = playbook.execute(build_incident(valid_iam_event, decision="REQUIRE_APPROVAL", risk_score=50.0))
 
         assert result is True
         assert not mock_disable.called
@@ -246,14 +264,13 @@ class TestSACompromisePlaybook:
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
 
-        # Mock low risk score
         mock_scoring_inst = mock_scoring.return_value
         mock_scoring_inst.calculate_risk_score.return_value = {
             "decision": "IGNORE",
             "risk_score": 10.0,
         }
 
-        result = playbook.execute(valid_iam_event)
+        result = playbook.execute(build_incident(valid_iam_event, decision="IGNORE", risk_score=10.0))
 
         assert result is True
         assert not mock_disable.called
@@ -286,14 +303,13 @@ class TestSACompromisePlaybook:
         mock_timer.return_value.__enter__ = MagicMock()
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
 
-        # Mock medium internal risk score
         mock_scoring_inst = mock_scoring.return_value
         mock_scoring_inst.calculate_risk_score.return_value = {
             "decision": "REQUIRE_APPROVAL",
             "risk_score": 60.0,
         }
 
-        result = playbook.execute(valid_iam_event)
+        result = playbook.execute(build_incident(valid_iam_event, decision="REQUIRE_APPROVAL", risk_score=60.0))
 
         assert result is True
         assert not mock_disable.called
@@ -321,7 +337,7 @@ class TestSACompromisePlaybook:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
         valid_iam_event["dry_run"] = True
 
-        result = playbook.execute(valid_iam_event)
+        result = playbook.execute(build_incident(valid_iam_event, decision="AUTO_ISOLATE", risk_score=90.0))
 
         assert result["mode"] == "dry_run"
         assert result["playbook"] == "SACompromise"
@@ -355,21 +371,21 @@ class TestStorageExfiltrationPlaybook:
 
     def test_can_handle_get_object(self, playbook, valid_storage_event):
         """Test playbook handles storage.objects.get"""
-        assert playbook.can_handle(valid_storage_event) is True
+        assert playbook.can_handle(build_incident(valid_storage_event)) is True
 
     def test_can_handle_list_objects(self, playbook, valid_storage_event):
         """Test playbook handles storage.objects.list"""
         valid_storage_event["protoPayload"]["methodName"] = "storage.objects.list"
-        assert playbook.can_handle(valid_storage_event) is True
+        assert playbook.can_handle(build_incident(valid_storage_event)) is True
 
     def test_cannot_handle_write_operation(self, playbook, valid_storage_event):
         """Test playbook rejects write operations"""
         valid_storage_event["protoPayload"]["methodName"] = "storage.objects.create"
-        assert playbook.can_handle(valid_storage_event) is False
+        assert playbook.can_handle(build_incident(valid_storage_event)) is False
 
     def test_cannot_handle_malformed_event(self, playbook):
         """Test playbook rejects malformed events"""
-        assert playbook.can_handle({"invalid": "data"}) is False
+        assert playbook.can_handle(build_incident({"invalid": "data"})) is False
 
     @patch("src.playbooks.storage_exfiltration.PlaybookTimer")
     def test_execute_dry_run_preview(self, mock_timer, playbook, valid_storage_event):
@@ -378,7 +394,7 @@ class TestStorageExfiltrationPlaybook:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
         valid_storage_event["dry_run"] = True
 
-        result = playbook.execute(valid_storage_event)
+        result = playbook.execute(build_incident(valid_storage_event, decision="EVALUATE"))
 
         assert result["mode"] == "dry_run"
         assert result["playbook"] == "StorageExfiltration"
@@ -470,7 +486,7 @@ class TestGKEPodIsolationDryRun:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
         valid_gke_event["dry_run"] = True
 
-        result = playbook.execute(valid_gke_event)
+        result = playbook.execute(build_incident(valid_gke_event))
 
         assert result["mode"] == "dry_run"
         assert result["playbook"] == "GKEPodIsolation"
@@ -502,7 +518,7 @@ class TestCloudSQLCompromiseDryRun:
         mock_timer.return_value.__exit__ = MagicMock(return_value=False)
         valid_sql_event["dry_run"] = True
 
-        result = playbook.execute(valid_sql_event)
+        result = playbook.execute(build_incident(valid_sql_event, decision="AUTO_ISOLATE"))
 
         assert result["mode"] == "dry_run"
         assert result["playbook"] == "CloudSQLCompromise"
