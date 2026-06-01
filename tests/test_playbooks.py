@@ -20,9 +20,7 @@ def build_incident(raw_event: dict, **overrides) -> UnifiedIncident:
         incident.raw_event = raw_event
 
     incident.pipeline_options = {
-        key: raw_event[key]
-        for key in ("dry_run", "preview_only", "execution_mode")
-        if key in raw_event
+        key: raw_event[key] for key in ("dry_run", "preview_only", "execution_mode") if key in raw_event
     }
     for key, value in overrides.items():
         setattr(incident, key, value)

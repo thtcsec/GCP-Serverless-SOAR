@@ -103,7 +103,6 @@ class SACompromise:
 
             return False
 
-
     @staticmethod
     def _build_preview(sa_email: str, action: str, caller_ip: str) -> dict[str, Any]:
         return {
@@ -138,7 +137,6 @@ class SACompromise:
                 },
             ],
         }
-
 
     @staticmethod
     def _extract_sa_email(resource_name: str) -> str | None:

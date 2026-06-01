@@ -21,4 +21,3 @@ def classify_severity(payload: dict | float | int) -> str:
 
 
 __all__ = ["detect_severity", "classify_severity"]
-

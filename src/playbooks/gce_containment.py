@@ -96,7 +96,6 @@ class GCEContainment:
         except IndexError:
             return None, None, None
 
-
     @staticmethod
     def _build_preview(project_id: str, zone: str, instance_name: str, category: str) -> dict[str, Any]:
         planned_actions = [

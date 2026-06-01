@@ -91,7 +91,6 @@ class StorageExfiltration:
             return resource_name.split("projects/_/buckets/")[1].split("/")[0]
         return None
 
-
     @staticmethod
     def _build_preview(bucket_name: str, principal: str, caller_ip: str, method_name: str) -> dict[str, Any]:
         return {
