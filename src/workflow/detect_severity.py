@@ -1,6 +1,6 @@
-"""DEPRECATED — delegates to unified pipeline via workflow.__init__."""
+"""DEPRECATED — delegates to unified pipeline via workflow._legacy."""
 
-from .__init__ import detect_severity
+from ._legacy import detect_severity
 
 
 def classify_severity(payload: dict | float | int) -> str:

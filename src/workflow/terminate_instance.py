@@ -1,5 +1,5 @@
-"""DEPRECATED — delegates to unified pipeline via workflow.__init__."""
+"""DEPRECATED — delegates to unified pipeline via workflow._legacy."""
 
-from .__init__ import terminate_instance
+from ._legacy import terminate_instance
 
 __all__ = ["terminate_instance"]
