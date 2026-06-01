@@ -5,7 +5,7 @@ from .__init__ import detect_severity
 
 def classify_severity(payload: dict | float | int) -> str:
     """Deprecated helper retained for legacy tests — use PolicyEngine instead."""
-    if isinstance(payload, (int, float)):
+    if isinstance(payload, int | float):
         if payload >= 8:
             return "CRITICAL"
         if payload >= 5:

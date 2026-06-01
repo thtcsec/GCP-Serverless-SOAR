@@ -1,6 +1,6 @@
 """Tests for the unified incident pipeline."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.core.pipeline import IncidentPipeline
 from src.core.policy import PolicyEngine
@@ -50,9 +50,11 @@ class TestIncidentPipeline:
                 "breakdown": {},
             }
 
-        with patch.object(PolicyEngine, "evaluate", side_effect=_auto_isolate) as mock_evaluate:
-            with patch.object(registry, "dispatch", return_value=True) as mock_dispatch:
-                result = pipeline.process(event)
+        with (
+            patch.object(PolicyEngine, "evaluate", side_effect=_auto_isolate),
+            patch.object(registry, "dispatch", return_value=True) as mock_dispatch,
+        ):
+            result = pipeline.process(event)
 
         assert result["statusCode"] == 200
         mock_dispatch.assert_called_once()

@@ -102,7 +102,9 @@ class PolicyEngine:
         result = {
             "risk_score": 0.0,
             "decision": "EVALUATE",
-            "decision_rationale": "Storage read event — delegated to StorageExfiltration playbook for pattern analysis.",
+            "decision_rationale": (
+                "Storage read delegated to StorageExfiltration playbook for pattern analysis."
+            ),
             "recommended_action": "evaluate_exfiltration_patterns",
             "summary": "Pipeline delegated evaluation to storage playbook.",
             "breakdown": {},

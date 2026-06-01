@@ -24,8 +24,8 @@ from src.core.audit_logger import AuditAction, AuditLogger
 from src.core.config import config
 from src.core.event_normalizer import UnifiedIncident
 from src.models.events import SCCFinding
-from src.playbooks.base import Playbook
 from src.playbooks._helpers import coerce_incident, is_dry_run
+from src.playbooks.base import Playbook
 
 logger = logging.getLogger("gcp-soar.playbook.ransomware")
 
