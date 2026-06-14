@@ -48,6 +48,8 @@ The previous multi-path architecture (direct `main.py` containment, Workflow YAM
 ### 🖼️ High-Level Architecture
 ![Architecture Diagram](images/gcp_soar.png)
 
+Legacy Cloud Workflows–centric diagram: `images/gcp_soar_deprecated_workflows.png`
+
 ## 🕵️ Threat Scenario
 
 **Scenario:** An attacker discovers a Remote Code Execution (RCE) vulnerability on your public-facing application and installs a Monero cryptocurrency miner.
@@ -58,81 +60,61 @@ The previous multi-path architecture (direct `main.py` containment, Workflow YAM
 ```mermaid
 sequenceDiagram
     participant Attacker
-    participant GCE as GCP Compute Engine
+    participant GCE as Compute Engine
     participant SCC as Security Command Center
-    participant PS as Pub/Sub Topic
-    participant CW as Cloud Workflows
-    participant CR as Cloud Run Workers
+    participant PS as Pub/Sub
+    participant CF as Cloud Function (handlers)
+    participant P as IncidentPipeline
+    participant PE as PolicyEngine
+    participant PB as GCEContainment
+    participant A as AuditLogger
     participant Sec as Security Admin
 
-    Attacker->>GCE: Exploits RCE vulnerability
-    Attacker->>GCE: Downloads Crypto Miner
-    GCE->>Internet: Makes unauthorized DNS queries (Mining Pool)
-    
+    Attacker->>GCE: Exploits RCE / installs miner
+    GCE->>Internet: Suspicious DNS (mining pool)
+
     rect rgb(255, 200, 200)
-        Note over SCC,GCE: Detection Phase
-        SCC->>GCE: Analyzes Network & Compute Logs
-        SCC-->>PS: Generates High Severity Finding (Score: 8.5)
+        Note over SCC,PS: Detection
+        SCC->>PS: Finding via Eventarc / Pub/Sub
     end
-    
+
     rect rgb(200, 220, 255)
-        Note over PS,CW: Orchestration Phase
-        PS-->>CW: Triggers Incident Response Workflow
-        CW->>CW: Validates Finding & Extracts VM/Project ID
+        Note over CF,P: Unified pipeline
+        PS->>CF: soar_responder → handle_event()
+        CF->>P: IncidentPipeline.process()
+        P->>P: normalize + correlate
+        P->>PE: evaluate()
+        PE-->>P: AUTO_ISOLATE (score ≥ 70)
+        P->>PB: PlaybookRegistry.dispatch()
     end
-    
+
     rect rgb(255, 230, 200)
-        Note over CW,CR: Automated Response Phase
-        CW->>GCE: Updates Network Tags (isolates VM)
-        CW->>GCE: Blocks Project SSH Keys
-        CW->>IAM: Detaches Service Account from VM
-        CW->>GCE: Triggers Compute Disk Snapshot
-        CW->>GCE: Executes stop_instance()
+        Note over PB,GCE: Playbook actions (or dry_run preview)
+        PB->>GCE: network tags, SA detach, SSH block, snapshot, stop
     end
-    
+
     rect rgb(200, 255, 200)
-        Note over CW,Sec: Forensic & Notification Phase
-        CW->>CR: Dispatches Forensics Worker Container
-        CR->>CR: Mounts Snapshot & Scans for Malware
-        CR-->>CW: Returns Forensic Report
-        CW->>Sec: Sends Slack/Jira Alert with Report
+        Note over P,Sec: Audit & notify
+        P->>A: lifecycle audit
+        P->>Sec: Slack/Jira on REQUIRE_APPROVAL
     end
 ```
 
-**Response Flow:**
-1. Within seconds, the SOAR workflow executes.
-2. The instance is isolated by replacing network tags with an `isolated-vm` tag, blocking all ingress and egress.
-3. The IAM Service Account is detached from the VM.
-4. SSH keys are blocked at the project level (`block-project-ssh-keys=TRUE`).
-5. A snapshot of the VM's primary disk is taken for the Blue Team.
-6. The VM is stopped to halt local execution.
+**Response Flow (playbook steps — use `dry_run=True` locally without cloud APIs):**
+1. Event reaches `handlers.handle_event()` via `entrypoint.py` transport adapters.
+2. `PolicyEngine` scores the incident; high risk → `GCEContainment`.
+3. Playbook may: isolate via network tags, detach service account, block SSH keys, snapshot disk, stop VM.
+4. `AuditLogger` records all pipeline phases.
 
-### Timeline/Response Flow
+### Response phases (logical order — not measured cloud latency)
 ```mermaid
-gantt
-    title GCP SOAR Incident Response Timeline
-    dateFormat  s
-    axisFormat  %S
-    
-    section Detection
-    SCC Analyzes Logs           :a1, 0, 10s
-    Eventarc Routes Finding     :a2, after a1, 2s
-    
-    section Automated Response
-    Pub/Sub Buffers Message     :a3, after a2, 1s
-    Workflow Validates Event    :a4, after a3, 2s
-    GCE Network Isolation       :crit, a5, after a4, 3s
-    SA Role Detachment          :crit, a6, after a5, 2s
-    Block SSH Keys              :a7, after a6, 2s
-    
-    section Forensics
-    Compute Disk Snapshotting   :a8, after a7, 15s
-    GCE Instance Shutdown       :a9, after a8, 5s
-    Cloud Run Malware Scan      :a10, after a9, 45s
-    
-    section Notification
-    Compile Final Report        :a11, after a10, 2s
-    Dispatch Slack/Jira Alert   :a12, after a11, 1s
+flowchart LR
+    A[SCC finding] --> B[Eventarc / Pub/Sub]
+    B --> C[Cloud Function pipeline]
+    C --> D[PolicyEngine]
+    D --> E[GCEContainment]
+    E --> F[AuditLogger]
+    D -.->|REQUIRE_APPROVAL| G[Slack/Jira]
 ```
 
 ## 🛡️ Advanced Features
@@ -142,11 +124,11 @@ gantt
 - **Behavioral Analytics**: Establishes behavioral baselines for Service Accounts to detect anomalies in IP location, temporal patterns (off-hours), and API action frequencies.
 - **Attack Forecaster**: Predictive security module that analyzes historical incidents to forecast probable future attack vectors and generates proactive security recommendations.
 
-### Workflow Engine (Cloud Workflows)
-- **Human approval** workflows for critical actions
-- **Multi-step incident response** with retry logic
-- **Parallel execution** for isolation and forensics
-- **Error handling** and dead letter queue processing
+### Unified Incident Pipeline
+- **Single hot path:** `handlers.handle_event()` → `IncidentPipeline.process()`
+- **7 playbooks** registered in `handlers.py`
+- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation
+- **Legacy:** `src/workflow/_legacy.py` delegates to `handle_event()` for old Terraform entry points
 
 ### Message Queue Layer (Pub/Sub)
 - **Buffer layer** prevents system overload during attacks
@@ -155,10 +137,8 @@ gantt
 - **Cross-project message routing**
 
 ### Container Workers (Cloud Run)
-- **Long-running operations** (15+ minute forensic scans)
-- **Full environment** access for comprehensive analysis
-- **Scalable compute** with auto-scaling
-- **Health monitoring** and graceful degradation
+- **Optional Terraform module** for long-running forensic scans (not on the Cloud Function hot path)
+- Forensic snapshots and metadata are also created inside playbooks (e.g. `GCEContainment`)
 
 ### Multi-Project Security
 - **Centralized security project** with cross-project roles
@@ -199,8 +179,8 @@ gantt
 ### Monitoring & Observability (Terraform)
 - **Cloud Monitoring Dashboard** with function execution volume, error rate, MTTR
 - **Alerting Policies** for Cloud Function errors and Pub/Sub backlogs
-- **Cloud Workflows execution tracking** (success/fail)
-- **Cloud Run forensic worker metrics**
+- **Pipeline audit** via `AuditLogger` → Cloud Logging
+- **Cloud Run forensic worker metrics** (if module deployed)
 
 ### Secret Rotation
 - **Automated key age detection** for all SOAR API keys
@@ -214,18 +194,13 @@ gantt
 - **Actionable context**: what happened, affected resource, severity, recommended next step
 
 ## 🗂️ Project Structure
-- `src/`: Python code for the Cloud Functions and Cloud Run responders.
-  - `main.py`: Main GCE incident response playbook
-  - `storage_exfil_response.py`: Storage data exfiltration detection and response
-  - `sa_compromise_response.py`: Service Account compromise detection and response
-  - `core/event_normalizer.py`: Unified event normalization (→ `UnifiedIncident`)
-  - `core/correlator.py`: Cross-cloud incident correlation engine
-  - `integrations/anomaly_detector.py`: ML anomaly detection (Isolation Forest)
-  - `integrations/scoring.py`: Risk scoring engine with anomaly boost
-  - `integrations/intel.py`: Multi-source threat intelligence (VirusTotal, AbuseIPDB)
-  - `core/process_containment.py`: Process-level containment via Compute Engine metadata
-  - `core/audit_logger.py`: Structured audit trail with Cloud Logging/GCS archival
-  - `core/secret_rotation.py`: API key rotation manager (90-day policy)
+- `src/`: Python code for Cloud Functions and optional Cloud Run workers.
+  - `handlers.py`: **Single entry** — `handle_event()`
+  - `entrypoint.py`: Transport adapters (`soar_responder`, `sa_compromise_responder`, …)
+  - `core/pipeline.py`: `IncidentPipeline`
+  - `playbooks/`: **Only** containment execution
+  - `main.py`, `sa_compromise_response.py`, `storage_exfil_response.py`, `queue_processor.py`: **deprecated** delegates
+  - `workflow/_legacy.py`: **deprecated** — Terraform compatibility only
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
   - `modules/monitoring/`: Cloud Monitoring Dashboard and Alert Policies
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
@@ -285,14 +260,14 @@ echo "YOUR_WEBHOOK_URL" | gcloud secrets versions add slack-webhook-url --data-f
 
 ## 📊 Security Coverage
 
-| Threat Type | Detection | Response Time | Risk Decision | Advanced Features |
-|-------------|-----------|---------------|---------------|-------------------|
-| GCE Ransomware/Compromise | SCC | < 30s | Scoring Engine | Workflow approval, Snapshot, Isolate |
-| Storage Exfiltration | Audit Logs | < 60s | Scoring Engine | Versioning, Block Public Access |
-| SA Compromise | Audit Logs | < 45s | Scoring Engine | Decision-based orchestration, ticketing |
-| GKE Pod Compromise | SCC | < 20s | Scoring Engine | Pod Eviction, Quarantine Labels |
-| Cloud SQL Abuse | Audit Logs | < 30s | Scoring Engine | Forensic backup, ticketing |
-| DDoS Attacks | VPC Flow Logs | < 15s | Aggregated | Queue buffering, auto-scaling |
+| Threat Type | Detection | Playbook | Notes |
+|-------------|-----------|----------|-------|
+| GCE Ransomware/Compromise | SCC | GCEContainment | Scoring + optional approval |
+| Storage Exfiltration | Audit Logs | StorageExfiltration | `EVALUATE` decision path |
+| SA Compromise | Audit Logs | SACompromise | Key revoke, IAM binding |
+| GKE Pod Compromise | SCC | GKEPodIsolationPlaybook | Pod eviction |
+| Cloud SQL Abuse | Audit Logs | CloudSQLCompromisePlaybook | Forensic backup |
+| API abuse | API Gateway / logs | APIGatewayAbusePlaybook | Abuse patterns |
 
 ## 🔧 Configuration
 
@@ -350,8 +325,8 @@ Since this platform is built entirely on native Serverless architecture, the cos
 
 ### Estimated Monthly Cost (Low/Moderate Traffic): `~$5 - $15 / month`
 - **GCP Security Command Center:** Premium tier is usually billed as a % of your total GCP spend. However, Standard tier is free and detects basic misconfigurations. Threat Detection relies on SCC Premium or Audit Logs.
-- **Cloud Workflows:** 5,000 free internal steps per month. Since SOAR workflows only trigger on critical findings, you will likely stay within the free tier (**$0**).
-- **Cloud Functions:** 2 Million free invocations/month. Usage for incident routing is negligible (**$0**).
+- **Cloud Functions:** 2 Million free invocations/month. Hot path is one invocation per incident (**$0** at lab scale).
+- **Cloud Workflows:** Only if legacy Terraform modules are enabled — **not** the application spine (**$0** when unused).
 - **Pub/Sub / Eventarc:** 10 GB free messaging per month. Event volume is minimal (**$0**).
 - **Cloud Run (Forensics Workers):** Billed per 100 milliseconds of compute. Since forensic containers only spin up during an incident and run for ~5-15 mins, cost is extremely low (**< $2/month**).
 - **Threat Intel (VirusTotal/AbuseIPDB):** Free Community API keys limit queries to ~500-1000/day. More than enough for SOAR alerts (**$0**).

@@ -10,12 +10,13 @@ An advanced **Security Orchestration** framework with multi-source intelligence,
     *   **AbuseIPDB:** Filters out scanners and known brute-force bots based on community-sourced reputation.
     *   **ML Anomaly Detection (Isolation Forest):** Behavioral analysis using feature vectors (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) with Z-Score fallback.
     *   **Scoring Engine (0-100):** Dynamically calculates `risk_score` combining threat intel confidence, finding severity, and anomaly boost (+15). Outputs: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
-*   **Workflow Orchestration:**
+*   **Workflow Orchestration (application spine):**
     *   **Event Routing:** Eventarc → Pub/Sub Topic for event-driven delivery.
-    *   **Workflow Engine:** Cloud Workflows → Cloud Functions (Remediation Worker) + Cloud Run (Forensic Analyst).
-    *   **Human Approval:** Slack/Jira integration for human-in-the-loop decisions.
+    *   **Unified Pipeline:** Cloud Functions Gen2 (`entrypoint.py` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
+    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
+    *   **Legacy:** `src/workflow/_legacy.py` and Cloud Workflows Terraform modules delegate to `handle_event()` — no business logic in YAML.
 *   **Containment Hierarchy (Function > Process > Container > Permission > Network):**
     *   **Process-Level:** Kill malicious processes and quarantine files via Compute Engine metadata scripts.
     *   **Container-Level:** Evict compromised GKE pods and apply quarantine network labels.
@@ -39,7 +40,7 @@ An advanced **Security Orchestration** framework with multi-source intelligence,
 
 ## 3. Observability & Security Hardening
 
-*   **Cloud Monitoring Dashboard (Terraform):** Function execution volume, error rate, MTTR, Pub/Sub depth, Cloud Workflows status, Cloud Run metrics.
+*   **Cloud Monitoring Dashboard (Terraform):** Function execution volume, error rate, MTTR, Pub/Sub depth, Cloud Function errors, Cloud Run metrics (optional forensic module).
 *   **Alerting Policies:** Auto-alert on Cloud Function errors and Pub/Sub backlogs.
 *   **Secret Rotation:** 90-day rotation policy for all API keys via Secret Manager.
 *   **Audit Logger:** Structured audit trail for every SOAR action with Cloud Logging + GCS archival.

@@ -10,12 +10,13 @@ Một khung làm việc **Điều phối Bảo mật** nâng cao với tình bá
     *   **AbuseIPDB:** Loại bỏ các máy quét và bot brute-force dựa trên điểm uy tín từ cộng đồng.
     *   **Phát hiện bất thường ML (Isolation Forest):** Phân tích hành vi sử dụng feature vector (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) với fallback Z-Score.
     *   **Scoring Engine (0-100):** Tính toán động `risk_score` kết hợp độ tin cậy tình báo, mức độ nghiêm trọng, và anomaly boost (+15). Đầu ra: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
-*   **Điều phối Luồng xử lý:**
-    *   **Định tuyến sự kiện:** Eventarc → Pub/Sub Topic cho giao nhận sự kiện.
-    *   **Bộ máy Workflow:** Cloud Workflows → Cloud Functions (Remediation Worker) + Cloud Run (Forensic Analyst).
-    *   **Phê duyệt con người:** Tích hợp Slack/Jira cho quyết định human-in-the-loop.
-    *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident` để tương thích đa nền tảng.
-    *   **Tương quan sự cố:** Nhóm các cảnh báo liên quan theo IOC chung (IP, tác nhân, ±5 phút) để phát hiện chiến dịch tấn công đa giai đoạn.
+*   **Điều phối (spine ứng dụng):**
+    *   **Định tuyến sự kiện:** Eventarc → Pub/Sub Topic.
+    *   **Pipeline thống nhất:** Cloud Functions Gen2 (`entrypoint.py` → `handle_event()` → `IncidentPipeline`).
+    *   **Phê duyệt con người:** Slack/Jira khi `PolicyEngine` trả về `REQUIRE_APPROVAL`.
+    *   **Chuẩn hóa sự kiện:** Chuyển đổi sự kiện native thành schema `UnifiedIncident`.
+    *   **Tương quan sự cố:** Nhóm cảnh báo theo IOC chung (IP, tác nhân, ±5 phút).
+    *   **Legacy:** `workflow/_legacy.py` và Cloud Workflows Terraform delegate về `handle_event()`.
 *   **Hệ thống phân cấp cách ly (Function > Process > Container > Permissions > Network):**
     *   **Tầng Process:** Kill các tiến trình độc hại và cách ly file qua Compute Engine metadata script.
     *   **Tầng Container:** Trục xuất GKE pod nhiễm mã độc và gắn label cách ly mạng.
@@ -39,7 +40,7 @@ Một khung làm việc **Điều phối Bảo mật** nâng cao với tình bá
 
 ## 3. Quan sát & Gia cố Bảo mật
 
-*   **Cloud Monitoring Dashboard (Terraform):** Lượng thực thi function, tỷ lệ lỗi, MTTR, độ sâu Pub/Sub, trạng thái Cloud Workflows, Cloud Run metrics.
+*   **Cloud Monitoring Dashboard (Terraform):** Lượng thực thi function, tỷ lệ lỗi, MTTR, độ sâu Pub/Sub, lỗi Cloud Function, Cloud Run (tùy chọn).
 *   **Alerting Policies:** Tự động cảnh báo khi Cloud Function lỗi hoặc Pub/Sub tồn đọng.
 *   **Xoay vòng bí mật:** Chính sách xoay 90 ngày cho tất cả API key qua Secret Manager.
 *   **Audit Logger:** Nhật ký kiểm toán có cấu trúc cho mọi hành động SOAR với Cloud Logging + GCS lưu trữ.
