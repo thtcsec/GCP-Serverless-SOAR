@@ -39,7 +39,7 @@ flowchart LR
 
 **Entry point:** `src/handlers.py` → `handle_event()`
 
-**Transport adapters:** `src/entrypoint.py` (Pub/Sub, Eventarc — no business logic)
+**Transport adapters:** `src/entrypoint.py` (Pub/Sub, Eventarc, optional HTTP `health` — no business logic)
 
 ### Legacy Diagram (Deprecated Paths Removed)
 
