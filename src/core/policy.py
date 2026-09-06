@@ -89,11 +89,10 @@ class PolicyEngine:
         action = incident.action
         intel_report: dict[str, Any] = {}
 
-        base_risk = 0.0
-        if any(m in action for m in HIGH_RISK_IAM_METHODS):
-            base_risk += 5.0
+        # Parity with AWS IAM bands: risky action → 6 else 4, +2 external, +2 off-hours
+        base_risk = 6.0 if any(m in action for m in HIGH_RISK_IAM_METHODS) else 4.0
         if caller_ip and not caller_ip.startswith(("compute.google", "container.google")):
-            base_risk += 3.0
+            base_risk += 2.0
         hour = datetime.now(UTC).hour
         if hour >= 23 or hour <= 5:
             base_risk += 2.0

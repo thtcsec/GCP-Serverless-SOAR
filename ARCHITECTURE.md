@@ -13,7 +13,7 @@ An advanced **Security Orchestration** framework with multi-source intelligence,
 *   **Workflow Orchestration (application spine):**
     *   **Event Routing:** Eventarc → Pub/Sub Topic for event-driven delivery.
     *   **Unified Pipeline:** Cloud Functions Gen2 (`entrypoint.py` → `handle_event()` → `IncidentPipeline`) — normalize, correlate, score, dispatch playbook, audit.
-    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`.
+    *   **Human Approval:** Slack/Jira integration when `PolicyEngine` returns `REQUIRE_APPROVAL`. Pending incidents are persisted (`APPROVAL_STORE=memory|firestore`) and resumed via Slack Block Kit buttons or API envelope `{"approval_action":"approve","incident_id":"..."}`. Interactivity URL → `slack_interactions` HTTP function (+ `SLACK_SIGNING_SECRET`).
     *   **Event Normalization:** Converts native events into `UnifiedIncident` schema for cross-cloud compatibility.
     *   **Incident Correlator:** Groups related alerts by shared IOCs (IP, actor, ±5 min window) to detect multi-stage campaigns.
     *   **Legacy:** `src/workflow/_legacy.py` and Cloud Workflows Terraform modules delegate to `handle_event()` — no business logic in YAML.
