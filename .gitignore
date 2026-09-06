@@ -23,3 +23,6 @@ terraform/*.zip
 terraform/out-*.json
 terraform/test-event*.json
 
+# Release build output
+dist/
+

@@ -4,6 +4,8 @@
 
 # 🚀 AI-Driven Cloud Incident Response Engine (GCP)
 
+![Release](https://img.shields.io/github/v/release/thtcsec/GCP-Serverless-SOAR?display_name=tag)
+
 > **Unified pipeline:** All events flow through `handlers.handle_event()` → `IncidentPipeline`.
 > Multi-cloud master diagram: [`images/master_architecture.png`](images/master_architecture.png). Architecture guides: [`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`ARCHITECTURE_vi.md`](./ARCHITECTURE_vi.md).
 
@@ -15,7 +17,7 @@
 
 Automated security incident response platform that detects threats using Security Command Center and automatically isolates compromised resources while preserving forensic evidence.
 
-**[🇬🇧 English Architecture Guide](./ARCHITECTURE.md) | [🇻🇳 Bản giải thích tiếng Việt](./ARCHITECTURE_vi.md)**
+**[🇬🇧 English Architecture Guide](./ARCHITECTURE.md) | [🇻🇳 Bản giải thích tiếng Việt](./ARCHITECTURE_vi.md) | [Changelog](./CHANGELOG.md) | [Migrate v1→v2](./MIGRATION_v2.md)**
 
 ## 🏗️ Architecture Overview
 
