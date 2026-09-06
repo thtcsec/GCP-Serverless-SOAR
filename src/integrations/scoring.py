@@ -8,6 +8,7 @@ class ScoringEngine:
     """Engine to calculate risk scores based on multi-source intelligence."""
 
     ANOMALY_BOOST = 15.0
+    # Canonical multi-cloud policy bands (parity with AWS ScoringEngine)
     IGNORE_THRESHOLD = 40.0
     AUTO_ISOLATE_THRESHOLD = 70.0
 

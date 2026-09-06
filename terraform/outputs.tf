@@ -30,5 +30,5 @@ output "pubsub_topic" {
 
 output "cloud_function_url" {
   description = "URL of the SOAR Cloud Function deployed"
-  value       = google_cloudfunctions2_function.soar_responder_function.service_config[0].uri
+  value       = try(google_cloudfunctions2_function.soar_responder_function.service_config[0].uri, "")
 }

@@ -297,6 +297,7 @@ resource "google_monitoring_dashboard" "soar_dashboard" {
 # ==========================================
 
 resource "google_monitoring_alert_policy" "playbook_failure" {
+  count        = var.enable_custom_metric_alerts ? 1 : 0
   display_name = "SOAR — Playbook Failure"
   combiner     = "OR"
 
@@ -347,6 +348,7 @@ resource "google_monitoring_alert_policy" "cloud_function_errors" {
 }
 
 resource "google_monitoring_alert_policy" "high_playbook_duration" {
+  count        = var.enable_custom_metric_alerts ? 1 : 0
   display_name = "SOAR — High Playbook Duration"
   combiner     = "OR"
 

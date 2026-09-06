@@ -57,7 +57,17 @@ class PolicyEngine:
 
     def _evaluate_scc(self, incident: UnifiedIncident) -> dict[str, Any]:
         severity = incident.severity.upper()
-        base_severity = 10.0 if severity == "CRITICAL" else 8.0 if severity == "HIGH" else 5.0
+        # Align ordinal mapping with AWS GuardDuty bands: CRITICAL/HIGH/MEDIUM/LOW
+        if severity == "CRITICAL":
+            base_severity = 10.0
+        elif severity == "HIGH":
+            base_severity = 8.0
+        elif severity in ("MEDIUM", "MODERATE"):
+            base_severity = 5.0
+        elif severity == "LOW":
+            base_severity = 2.0
+        else:
+            base_severity = 5.0
 
         intel_report: dict[str, Any] = {}
         source_ip = incident.source_ip

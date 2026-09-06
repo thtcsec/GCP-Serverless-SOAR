@@ -1,11 +1,15 @@
 """
-Tests for GCP Scoring Engine
+Tests for GCP Scoring Engine — thresholds must stay in parity with AWS (40 / 70).
 """
 
 from src.integrations.scoring import ScoringEngine
 
 
 class TestScoringEngine:
+    def test_canonical_thresholds(self):
+        assert ScoringEngine.IGNORE_THRESHOLD == 40.0
+        assert ScoringEngine.AUTO_ISOLATE_THRESHOLD == 70.0
+
     def test_calculate_risk_score_auto_isolate(self):
         engine = ScoringEngine()
         intel_data = {"virustotal": {"malicious": 15}, "abuseipdb": {"abuseConfidenceScore": 90}}

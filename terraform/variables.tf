@@ -42,7 +42,7 @@ variable "function_min_instances" {
 variable "function_memory" {
   description = "Memory for Cloud Functions"
   type        = string
-  default     = "256M"
+  default     = "512M"
 }
 
 variable "function_timeout_seconds" {
@@ -55,4 +55,22 @@ variable "notification_channels" {
   description = "List of Cloud Monitoring notification channel IDs for alert policies"
   type        = list(string)
   default     = []
+}
+
+variable "enable_audit_log_responders" {
+  description = "Deploy optional IAM/Storage audit-log Cloud Functions (same handle_event spine). Off by default for lab cost."
+  type        = bool
+  default     = false
+}
+
+variable "lab_mock_intel" {
+  description = "When true, ThreatIntelService returns deterministic mock scores (lab/demo only)."
+  type        = bool
+  default     = true
+}
+
+variable "enable_custom_metric_alerts" {
+  description = "Enable alerts on custom soar/* metrics (requires metric descriptors to exist)."
+  type        = bool
+  default     = false
 }

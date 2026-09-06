@@ -18,3 +18,8 @@ coverage.xml
 # Output files — NEVER commit
 *.txt
 !requirements.txt
+audit.log
+terraform/*.zip
+terraform/out-*.json
+terraform/test-event*.json
+
