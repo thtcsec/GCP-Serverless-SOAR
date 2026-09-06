@@ -5,7 +5,7 @@
 # 🚀 AI-Driven Cloud Incident Response Engine (GCP)
 
 > **Unified pipeline:** All events flow through `handlers.handle_event()` → `IncidentPipeline`.
-> See [../README.md](../README.md) and [../ARCHITECTURE_RESET.md](../ARCHITECTURE_RESET.md).
+> Multi-cloud master diagram: [`images/master_architecture.png`](images/master_architecture.png). Architecture guides: [`ARCHITECTURE.md`](./ARCHITECTURE.md) / [`ARCHITECTURE_vi.md`](./ARCHITECTURE_vi.md).
 
 ![GCP](https://img.shields.io/badge/GoogleCloud-%234285F4.svg?style=for-the-badge&logo=google-cloud&logoColor=white) 
 ![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white) 
@@ -46,6 +46,13 @@ flowchart LR
 The previous multi-path architecture (direct `main.py` containment, Workflow YAML business logic) has been consolidated. Enterprise Terraform modules may still exist for infra scaffolding; application logic runs only through the pipeline above.
 
 ### 🖼️ High-Level Architecture
+
+**Multi-cloud master (UIRP):**
+
+![Master Architecture](images/master_architecture.png)
+
+**GCP detail:**
+
 ![Architecture Diagram](images/gcp_soar.png)
 
 Legacy Cloud Workflows–centric diagram: `images/gcp_soar_deprecated_workflows.png`
