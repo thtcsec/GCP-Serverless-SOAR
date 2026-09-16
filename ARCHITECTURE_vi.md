@@ -9,7 +9,8 @@ Một khung làm việc **Điều phối Bảo mật** nâng cao với tình bá
     *   **VirusTotal:** Đối soát IP nguồn với cơ sở dữ liệu mối đe dọa toàn cầu (~70 engines).
     *   **AbuseIPDB:** Loại bỏ các máy quét và bot brute-force dựa trên điểm uy tín từ cộng đồng.
     *   **Phát hiện bất thường ML (Isolation Forest):** Phân tích hành vi sử dụng feature vector (`hour_of_day`, `day_of_week`, `ip_reputation_score`, `action_risk_level`, `request_frequency`) với fallback Z-Score.
-    *   **Scoring Engine (0-100):** Tính toán động `risk_score` kết hợp độ tin cậy tình báo, mức độ nghiêm trọng, và anomaly boost (+15). Đầu ra: `IGNORE (<40)`, `REQUIRE_APPROVAL (40-70)`, `AUTO_ISOLATE (>70)`.
+    *   **Scoring Engine (0-100):** Tính `risk_score` từ threat intel, severity, và anomaly boost (+15 khi vượt ngưỡng flag). Ngưỡng quyết định lấy từ **Nickel** `config/soar_policy.ncl` → JSON → `ScoringEngine`: `IGNORE (&lt;40)`, `REQUIRE_APPROVAL (40–69)`, `AUTO_ISOLATE (≥70)`.
+    *   **ThreatClassifier:** Gắn MITRE ATT&amp;CK TTPs (`mitre_ttps`) vào response sau bước scoring.
 *   **Điều phối (spine ứng dụng):**
     *   **Định tuyến sự kiện:** Eventarc → Pub/Sub Topic.
     *   **Pipeline thống nhất:** Cloud Functions Gen2 (`entrypoint.py` → `handle_event()` → `IncidentPipeline`).

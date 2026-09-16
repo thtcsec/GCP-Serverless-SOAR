@@ -137,6 +137,7 @@ flowchart LR
 - **Single hot path:** `handlers.handle_event()` → `IncidentPipeline.process()`
 - **7 playbooks** registered in `handlers.py`
 - **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation
+- **Policy bands (Nickel):** `config/soar_policy.ncl` → `config/soar_policy.json` → `ScoringEngine` (`IGNORE` &lt;40 / `REQUIRE_APPROVAL` 40–69 / `AUTO_ISOLATE` ≥70). CI runs `python scripts/check_ncl_export.py`.
 - **Legacy:** `src/workflow/_legacy.py` delegates to `handle_event()` for old Terraform entry points
 
 ### Message Queue Layer (Pub/Sub)
@@ -203,13 +204,16 @@ flowchart LR
 - **Actionable context**: what happened, affected resource, severity, recommended next step
 
 ## 🗂️ Project Structure
+- `config/`: Nickel policy source (`soar_policy.ncl`) + exported JSON consumed by Python
 - `src/`: Python code for Cloud Functions and optional Cloud Run workers.
   - `handlers.py`: **Single entry** — `handle_event()`
-  - `entrypoint.py`: Transport adapters (`soar_responder`, `sa_compromise_responder`, …)
+  - `entrypoint.py`: Transport adapters (`soar_responder`, `health`, …)
   - `core/pipeline.py`: `IncidentPipeline`
+  - `core/policy_config.py`: loads Nickel-exported decision bands
   - `playbooks/`: **Only** containment execution
   - `main.py`, `sa_compromise_response.py`, `storage_exfil_response.py`, `queue_processor.py`: **deprecated** delegates
   - `workflow/_legacy.py`: **deprecated** — Terraform compatibility only
+- `scripts/export_ncl_config.py`, `scripts/check_ncl_export.py`: regenerate / verify policy JSON
 - `terraform/`: Infrastructure as Code (IaC) definitions to deploy all GCP resources.
   - `modules/monitoring/`: Cloud Monitoring Dashboard and Alert Policies
 - `attack_simulation/`: Interactive Attack Simulator Container (Docker wrapper for scripts targeting GCE, Storage, and SA).
