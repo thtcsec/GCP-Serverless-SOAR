@@ -60,3 +60,9 @@ class TestScoringEngine:
         assert result["risk_score"] == 0.0
         assert result["decision"] == "IGNORE"
         assert "mapped to IGNORE" in result["decision_rationale"]
+
+    def test_anomaly_boost_adds_fifteen_points(self):
+        result = ScoringEngine.calculate_risk_score({}, initial_severity=5.0, anomaly_score=-0.8)
+        assert result["risk_score"] == 30.0
+        assert result["breakdown"]["anomaly_boost"] == 15.0
+        assert result["decision"] == "IGNORE"

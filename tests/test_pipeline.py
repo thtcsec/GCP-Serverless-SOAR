@@ -1,6 +1,6 @@
 """Tests for the unified incident pipeline."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from src.core.pipeline import IncidentPipeline
 from src.core.policy import PolicyEngine
@@ -63,3 +63,49 @@ class TestIncidentPipeline:
         pipeline = IncidentPipeline(registry=registry)
         result = pipeline.process({"unexpected": True})
         assert result["statusCode"] == 422
+
+    @patch("src.core.pipeline.emit_metric")
+    @patch("src.core.pipeline.SlackNotifier")
+    def test_pipeline_enriches_response_with_mitre_ttps(self, _mock_slack, _mock_metric):
+        classifier = MagicMock()
+        classifier.predict_threat_severity.return_value = {
+            "threat_type": "crypto_mining",
+            "mitre_ttps": ["T1496"],
+            "confidence": 0.9,
+            "predicted_severity": "HIGH",
+        }
+        pipeline = IncidentPipeline(registry=registry, policy=PolicyEngine(), threat_classifier=classifier)
+        event = {
+            "category": "Malware",
+            "severity": "LOW",
+            "resourceName": "//compute.googleapis.com/projects/p/zones/z/instances/i",
+            "state": "ACTIVE",
+            "resource": {"name": "i", "type": "compute.googleapis.com/Instance"},
+        }
+
+        result = pipeline.process(event)
+
+        assert result["statusCode"] == 200
+        assert result["body"]["mitre_ttps"] == ["T1496"]
+        assert result["body"]["threat_type"] == "crypto_mining"
+
+    @patch("src.core.pipeline.emit_metric")
+    @patch("src.core.pipeline.SlackNotifier")
+    def test_pipeline_archives_audit_when_bucket_set(self, _mock_slack, _mock_metric, monkeypatch):
+        audit = MagicMock()
+        audit.log = MagicMock()
+        audit.export_to_gcs = MagicMock(return_value=True)
+        pipeline = IncidentPipeline(registry=registry, policy=PolicyEngine(), audit=audit)
+        monkeypatch.setenv("AUDIT_GCS_BUCKET", "soar-audit-lab")
+
+        event = {
+            "category": "Malware",
+            "severity": "LOW",
+            "resourceName": "//compute.googleapis.com/projects/p/zones/z/instances/i",
+            "state": "ACTIVE",
+            "resource": {"name": "i", "type": "compute.googleapis.com/Instance"},
+        }
+        result = pipeline.process(event)
+
+        assert result["statusCode"] == 200
+        audit.export_to_gcs.assert_called_with("soar-audit-lab")
