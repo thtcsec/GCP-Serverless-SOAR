@@ -44,11 +44,11 @@ resource "google_cloudfunctions2_function" "soar_responder_function" {
     timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
 
-    environment_variables = {
+    environment_variables = merge(local.approval_env, {
       SLACK_WEBHOOK_URL = var.slack_webhook_url
       LAB_MOCK_INTEL    = var.lab_mock_intel ? "true" : "false"
       PROJECT_ID        = var.project_id
-    }
+    })
   }
 
   event_trigger {
@@ -84,11 +84,11 @@ resource "google_cloudfunctions2_function" "sa_soar_responder_function" {
     timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
 
-    environment_variables = {
+    environment_variables = merge(local.approval_env, {
       PROJECT_ID     = var.project_id
       ALERT_TOPIC    = google_pubsub_topic.scc_findings_topic.name
       LAB_MOCK_INTEL = var.lab_mock_intel ? "true" : "false"
-    }
+    })
   }
 
   event_trigger {
@@ -126,12 +126,12 @@ resource "google_cloudfunctions2_function" "storage_soar_responder_function" {
     timeout_seconds       = var.function_timeout_seconds
     service_account_email = google_service_account.soar_function_sa.email
 
-    environment_variables = {
+    environment_variables = merge(local.approval_env, {
       PROJECT_ID             = var.project_id
       ALERT_TOPIC            = google_pubsub_topic.scc_findings_topic.name
       EXFILTRATION_THRESHOLD = "10737418240"
       LAB_MOCK_INTEL         = var.lab_mock_intel ? "true" : "false"
-    }
+    })
   }
 
   event_trigger {

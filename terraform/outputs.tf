@@ -32,3 +32,8 @@ output "cloud_function_url" {
   description = "URL of the SOAR Cloud Function deployed"
   value       = try(google_cloudfunctions2_function.soar_responder_function.service_config[0].uri, "")
 }
+
+output "approval_firestore_collection" {
+  description = "Firestore collection for pending REQUIRE_APPROVAL records"
+  value       = "soar_pending_approvals"
+}

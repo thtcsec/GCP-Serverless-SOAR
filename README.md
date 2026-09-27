@@ -136,7 +136,7 @@ flowchart LR
 ### Unified Incident Pipeline
 - **Single hot path:** `handlers.handle_event()` → `IncidentPipeline.process()`
 - **7 playbooks** registered in `handlers.py`
-- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation
+- **Human approval:** `REQUIRE_APPROVAL` (score 40–69) → Slack notify, no auto-remediation. Lab Terraform creates the default Firestore database and sets `APPROVAL_STORE=firestore` (`soar_pending_approvals`) on the responder functions so pending records survive cold starts.
 - **Policy bands (Nickel):** `config/soar_policy.ncl` → `config/soar_policy.json` → `ScoringEngine` (`IGNORE` &lt;40 / `REQUIRE_APPROVAL` 40–69 / `AUTO_ISOLATE` ≥70). CI runs `python scripts/check_ncl_export.py`.
 - **Legacy:** `src/workflow/_legacy.py` delegates to `handle_event()` for old Terraform entry points
 
