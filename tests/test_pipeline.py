@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
+from src.core.event_normalizer import UnifiedIncident
 from src.core.pipeline import IncidentPipeline
 from src.core.policy import PolicyEngine
 from src.handlers import registry
@@ -63,6 +64,26 @@ class TestIncidentPipeline:
         pipeline = IncidentPipeline(registry=registry)
         result = pipeline.process({"unexpected": True})
         assert result["statusCode"] == 422
+
+    def test_attach_report_on_require_approval(self):
+        pipeline = IncidentPipeline(registry=registry)
+        incident = UnifiedIncident(
+            incident_id="rep-1",
+            decision="REQUIRE_APPROVAL",
+            severity="HIGH",
+            risk_score=55.0,
+            action="SetIamPolicy",
+            resource="projects/p/serviceAccounts/sa",
+        )
+        body = pipeline._attach_report(incident, {"status": "pending_approval", "decision": "REQUIRE_APPROVAL"})
+        assert str(body["report_id"]).startswith("IR-")
+        assert body["report_path"]
+
+    def test_attach_report_skips_ignore(self):
+        pipeline = IncidentPipeline(registry=registry)
+        incident = UnifiedIncident(incident_id="rep-2", decision="IGNORE")
+        body = pipeline._attach_report(incident, {"status": "ignored"})
+        assert "report_id" not in body
 
     @patch("src.core.pipeline.emit_metric")
     @patch("src.core.pipeline.SlackNotifier")

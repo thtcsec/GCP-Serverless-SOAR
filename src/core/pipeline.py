@@ -21,6 +21,7 @@ from .correlator import IncidentCorrelator
 from .event_normalizer import EventNormalizer, UnifiedIncident
 from .metrics import emit_metric
 from .policy import PolicyEngine
+from .report_generator import ReportGenerator
 
 logger = logging.getLogger("gcp-soar.pipeline")
 
@@ -227,14 +228,12 @@ class IncidentPipeline:
         if isinstance(result, dict):
             body = {**result, **{k: v for k, v in enrichment.items() if k not in result}}
             self._archive_audit()
-            return {"statusCode": 200, "body": body}
+            return {"statusCode": 200, "body": self._attach_report(incident, body)}
 
         if result:
             self._archive_audit()
-            return {
-                "statusCode": 200,
-                "body": {"status": "executed", "incident_id": incident.incident_id, **enrichment},
-            }
+            executed = {"status": "executed", "incident_id": incident.incident_id, **enrichment}
+            return {"statusCode": 200, "body": self._attach_report(incident, executed)}
 
         return {
             "statusCode": 500,
@@ -269,6 +268,10 @@ class IncidentPipeline:
                     "resource": incident.resource,
                     "risk_score": incident.risk_score,
                     "decision": incident.decision,
+                    "anomaly_score": incident.anomaly_score,
+                    "mitre_ttps": (incident.threat_classification or {}).get("mitre_ttps")
+                    or score_result.get("mitre_ttps")
+                    or [],
                     "trace_id": getattr(incident, "trace_id", ""),
                 }
             )
@@ -328,4 +331,18 @@ class IncidentPipeline:
             details={"phase": "complete", **merged},
         )
         self._archive_audit()
-        return {"statusCode": 200, "body": merged}
+        return {"statusCode": 200, "body": self._attach_report(incident, merged)}
+
+    def _attach_report(self, incident: UnifiedIncident, body: dict[str, Any]) -> dict[str, Any]:
+        """Write a Markdown incident report for high-severity and approval paths."""
+        if incident.decision not in {"AUTO_ISOLATE", "REQUIRE_APPROVAL"}:
+            return body
+        try:
+            payload = incident.model_dump(exclude={"raw_event"})
+            if body.get("summary"):
+                payload["summary"] = body["summary"]
+            report = ReportGenerator.generate(payload)
+            return {**body, "report_id": report["report_id"], "report_path": report["report_path"]}
+        except Exception as exc:
+            logger.warning("Incident report failed (non-fatal): %s", exc)
+            return body

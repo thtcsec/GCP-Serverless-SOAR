@@ -32,11 +32,16 @@ def test_request_approval_persists_and_notifies(mock_slack_cls):
     pipe = IncidentPipeline(registry=PlaybookRegistry(), approval_store=store)
     mock_slack_cls.return_value.send_interactive_approval.return_value = {"notification_sent": True}
 
-    pipe._request_approval(_incident(), {"summary": "needs review"})
+    inc = _incident()
+    inc.anomaly_score = -0.8
+    inc.threat_classification = {"mitre_ttps": ["T1078"]}
+    pipe._request_approval(inc, {"summary": "needs review"})
     pending = store.get("inc-gcp-1")
     assert pending is not None
     assert pending["status"] == "pending"
-    mock_slack_cls.return_value.send_interactive_approval.assert_called_once()
+    payload = mock_slack_cls.return_value.send_interactive_approval.call_args[0][0]
+    assert payload["anomaly_score"] == -0.8
+    assert payload["mitre_ttps"] == ["T1078"]
 
 
 def test_resume_reject_and_approve():
