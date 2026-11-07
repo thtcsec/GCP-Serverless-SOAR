@@ -69,14 +69,22 @@ def _decode_audit_cloud_event(cloud_event) -> dict:
     return data
 
 
+def _dispatch_event(event_data):
+    result = handle_event(event_data)
+    if result.get("statusCode", 200) >= 400:
+        raise RuntimeError("Incident pipeline returned an error")
+    return result
+
+
 @functions_framework.cloud_event
 def soar_responder(cloud_event):
     """Pub/Sub adapter (SCC / security findings)."""
     try:
         event_data = _decode_pubsub_cloud_event(cloud_event)
-        handle_event(event_data)
+        _dispatch_event(event_data)
     except Exception as exc:
         logger.error("soar_responder failed: %s", exc)
+        raise
 
 
 @functions_framework.cloud_event
@@ -84,9 +92,10 @@ def sa_compromise_responder(cloud_event):
     """Eventarc adapter (IAM audit logs)."""
     try:
         event_data = _decode_audit_cloud_event(cloud_event)
-        handle_event(event_data)
+        _dispatch_event(event_data)
     except Exception as exc:
         logger.error("sa_compromise_responder failed: %s", exc)
+        raise
 
 
 @functions_framework.cloud_event
@@ -94,9 +103,10 @@ def storage_exfil_responder(cloud_event):
     """Eventarc adapter (Storage audit logs)."""
     try:
         event_data = _decode_audit_cloud_event(cloud_event)
-        handle_event(event_data)
+        _dispatch_event(event_data)
     except Exception as exc:
         logger.error("storage_exfil_responder failed: %s", exc)
+        raise
 
 
 @functions_framework.cloud_event
@@ -104,6 +114,7 @@ def queue_processor(cloud_event):
     """Pub/Sub queue adapter — routes to unified pipeline (replaces workflow fan-out)."""
     try:
         event_data = _decode_pubsub_cloud_event(cloud_event)
-        handle_event(event_data)
+        _dispatch_event(event_data)
     except Exception as exc:
         logger.error("queue_processor failed: %s", exc)
+        raise

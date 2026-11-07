@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $python = Join-Path $PSScriptRoot "..\..\.venv\Scripts\python.exe"
-& $python -m pytest tests/
-& $python -m flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
-& $python -m bandit -r src -ll -ii
-& $python -m mypy src --ignore-missing-imports --no-strict-optional
+if (!(Test-Path -LiteralPath $python)) {
+    $python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
+}
+& $python (Join-Path $PSScriptRoot "run_checks.py") @args
+exit $LASTEXITCODE
