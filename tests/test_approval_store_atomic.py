@@ -7,6 +7,30 @@ import pytest
 from src.core.approval_store import FirestoreApprovalStore
 
 
+def test_firestore_create_does_not_overwrite_existing_record():
+    from google.api_core.exceptions import AlreadyExists
+
+    store = FirestoreApprovalStore.__new__(FirestoreApprovalStore)
+    store._col = MagicMock()
+    record = {"incident_id": "event:one", "status": "processing"}
+    assert store.create_once(record)
+    store._col.document.return_value.create.side_effect = AlreadyExists("duplicate")
+    assert not store.create_once(record)
+    store._col.document.return_value.set.assert_not_called()
+
+
+def test_firestore_checks_deadline_in_transaction():
+    store = FirestoreApprovalStore.__new__(FirestoreApprovalStore)
+    store._client = MagicMock()
+    store._col = MagicMock()
+    snapshot = store._col.document.return_value.get.return_value
+    snapshot.exists = True
+    snapshot.to_dict.return_value = {"status": "pending", "expires_at": 1}
+    with patch("google.cloud.firestore.transactional", side_effect=lambda callback: callback):
+        assert not store.transition("old", "pending", "executing", require_unexpired=True)
+    store._client.transaction.return_value.update.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "current,exists,expected",
     [
