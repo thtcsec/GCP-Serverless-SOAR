@@ -10,14 +10,22 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 from ..integrations.slack_notifier import SlackNotifier
 from ..ml.threat_classifier import ThreatClassifier
 from ..playbooks.registry import PlaybookRegistry
-from .approval_store import ApprovalStore, build_pending_record, get_approval_store
+from .approval_store import (
+    ApprovalStore,
+    MemoryApprovalStore,
+    build_pending_record,
+    get_approval_store,
+    positive_seconds,
+)
 from .audit_logger import AuditAction, AuditLogger, get_audit_logger
 from .correlator import IncidentCorrelator
+from .event_guard import EventGuard, elapsed_seconds
 from .event_normalizer import EventNormalizer, UnifiedIncident
 from .metrics import emit_metric
 from .policy import PolicyEngine
@@ -39,18 +47,26 @@ class IncidentPipeline:
         correlator: IncidentCorrelator | None = None,
         approval_store: ApprovalStore | None = None,
         threat_classifier: ThreatClassifier | None = None,
+        event_store: ApprovalStore | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy or PolicyEngine()
         self._audit = audit or get_audit_logger()
         self._correlator = correlator or _correlator
         self._approvals = approval_store or get_approval_store()
+        journal = event_store or (
+            MemoryApprovalStore(records={}) if isinstance(self._approvals, MemoryApprovalStore) else self._approvals
+        )
+        self._event_guard = EventGuard(journal)
         self._classifier = threat_classifier or ThreatClassifier()
 
     def process(self, event_data: dict[str, Any]) -> dict[str, Any]:
+        return self._event_guard.run(event_data, self._process_event)
+
+    def _process_event(self, event_data: dict[str, Any]) -> dict[str, Any]:
         """Run the canonical incident pipeline and return an HTTP-style response."""
         action = str(event_data.get("approval_action") or "").lower()
-        if action in {"approve", "reject"}:
+        if action in {"approve", "reject", "status"}:
             return self.resume_approval(
                 incident_id=str(event_data.get("incident_id") or ""),
                 action=action,
@@ -156,11 +172,29 @@ class IncidentPipeline:
         if not pending:
             return {"statusCode": 404, "body": {"error": "pending_approval_not_found", "incident_id": incident_id}}
 
-        if pending.get("status") != "pending":
+        state = pending.get("status")
+        if state == "pending" and pending.get("expires_at", 0) <= time.time():
+            self._approvals.transition(incident_id, "pending", "expired", actor=actor)
+            pending = self._approvals.get(incident_id) or pending
+            state = pending.get("status")
+        stalled = state == "executing" and elapsed_seconds(pending) >= positive_seconds(
+            "EXECUTION_TIMEOUT_SECONDS", 900
+        )
+        if action.lower() == "status":
+            return {
+                "statusCode": 200,
+                "body": {
+                    "incident_id": incident_id,
+                    "status": "stalled" if stalled else state,
+                    "expires_at": pending.get("expires_at"),
+                    "requires_review": stalled or state == "failed",
+                },
+            }
+        if state != "pending":
             return {
                 "statusCode": 409,
                 "body": {
-                    "error": "invalid_approval_state",
+                    "error": "execution_stalled" if stalled else "invalid_approval_state",
                     "status": pending.get("status"),
                     "incident_id": incident_id,
                 },
@@ -183,7 +217,7 @@ class IncidentPipeline:
         if action != "approve":
             return {"statusCode": 400, "body": {"error": "action must be approve|reject"}}
 
-        if not self._approvals.transition(incident_id, "pending", "executing", actor=actor):
+        if not self._approvals.transition(incident_id, "pending", "executing", actor=actor, require_unexpired=True):
             return {"statusCode": 409, "body": {"error": "approval_already_claimed"}}
         self._audit.log(
             AuditAction.APPROVAL_GRANTED,
@@ -269,7 +303,8 @@ class IncidentPipeline:
         try:
             self._approvals.put(record)
         except Exception as exc:
-            logger.warning("Failed to persist pending approval (non-fatal): %s", exc)
+            logger.error("Failed to persist pending approval: %s", exc)
+            raise
 
         try:
             notifier = SlackNotifier()
